@@ -64,24 +64,24 @@ Client: Leaders Key · Built by: Jayraj Dhole & Dhairya Dixit · Quotation ref: 
 Hardware, paid licences (MDM, VPN, hosting), mobile apps, screenshot/screen-recording monitoring, payroll/billing, any feature not listed above.
 
 ## 5. Open questions — confirm with the client before the related phase
-1. **Are idle minutes deducted from working hours?** Default assumption: idle time is logged and shown separately as active vs idle, but the session is not auto-stopped or deducted. (Phase 2, 7)
-2. How many employees now and in a year? (capacity)
-3. GPU model and VRAM of the PC (decides the Ollama model size). (Phase 4)
-4. Initial allowed apps and websites, including exact app names (e.g. Antigravity). (Phase 10)
-5. Who administers the MacBooks; will there be an MDM? Without MDM, blocking is best-effort with tamper reporting. (Phase 10)
-6. Wording of the employee consent for activity tracking and face verification. (Phase 8)
-7. What counts as "background activity" for editors/designers (renders, exports)? (Phase 9)
-8. Plain-language output: Hinglish (Roman script) or English? Default: Hinglish. (Phase 4)
-9. Work days/hours and holidays: any expected-hours target to show? (Phase 2)
-10. Domain name or tunnel choice (Tailscale / Cloudflare Tunnel) for remote access. (Phase 11)
-11. Registration window: the code must be entered within 10 minutes; once accepted, how long does the employee get to finish (default 30 min)? (Phase 1)
-12. Should the owner approve each new employee after registration, or is the owner-issued code enough? Default: no extra approval, owner is notified. (Phase 1)
-13. Store one profile photo at enrollment so the owner can visually verify identity? Default: NO, no images are ever stored. (Phase 9)
+1. **Are idle minutes deducted from working hours?** Default assumption: idle time is logged and shown separately as active vs idle, but the session is not auto-stopped or deducted.No just show total logged in hour and how much time employee is Idle (Phase 2, 7)
+2. How many employees now and in a year? (capacity)16 now and for in year it depends.
+3. GPU model and VRAM of the PC (decides the Ollama model size). In PC they have RTX 3050 with 4gb VRAM (Phase 4)
+4. Initial allowed apps and websites, including exact app names (e.g. Antigravity).Antigravity, Docker, Github, VScode, Render, Mongodb, Chatgpt, Claude, Groq, Vercel, Hostinger, Railway, Excel
+5. Who administers the MacBooks; will there be an MDM? Without MDM, blocking is best-effort with tamper reporting. (Phase 10) Without MDM
+6. Wording of the employee consent for activity tracking and face verification. (Phase 8) Yes we will sign the consent form from employee
+7. What counts as "background activity" for editors/designers (renders, exports)? (Phase 9) Yes Renders and Exports and something related to their work consider as Background activity
+8. Plain-language output: Hinglish (Roman script) or English? Default: English.
+9. Work days/hours and holidays: any expected-hours target to show? no just show work days/hours and holidays don't show target hours
+10. Domain name or tunnel choice (Tailscale / Cloudflare Tunnel) for remote access.Cloudflare Tunnel
+11. Registration window: the code must be entered within 10 minutes; once accepted, how long does the employee get to finish (default 30 min)? yes 30mins (Phase 1)
+12. Should the owner approve each new employee after registration, or is the owner-issued code enough? Default: no extra approval, owner is notified. (Phase 1) no just code is enough, just show notification on admin dashboard that new employee is added and show that employee details
+13. Store one profile photo at enrollment so the owner can visually verify identity?yes store profile photo. (Phase 9)
 14. Should the owner be able to pre-select and lock the job role in the invite, or can employees always choose? Default: employee chooses unless owner pre-selected. (Phase 3)
-15. Extra profile fields wanted: phone, joining date, emergency contact? Default: optional phone only. (Phase 3)
-16. Confirm the (R) items are in scope: password-reset/re-scan codes, duplicate-face check, audit log. (Phase 1, 9)
-17. GPU PC: operating system (Windows or Linux), runs 24/7?, UPS?, who maintains it? (Phase 11)
-18. Is the client OK with Cloudflare as the connection provider (traffic is decrypted at Cloudflare's edge), or do they need a private VPN such as Tailscale (paid per user for a business)? (Phase 11)
-19. Does the owner want phone push alerts (O-14)? iPhone users must add the site to the Home Screen. (Phase 7)
-20. Will company MacBook users run as standard (non-admin) macOS accounts, with the owner holding the admin account? Strongly recommended; developers who need admin rights weaken the blocking. (Phase 10)
+15. Extra profile fields wanted: phone, joining date, emergency contact? yes . (Phase 3)
+16. Confirm the (R) items are in scope: password-reset/re-scan codes, duplicate-face check, audit log.yes do it (Phase 1, 9)
+17. GPU PC: operating system (Windows or Linux), runs 24/7?, UPS?, who maintains it? (Phase 11) Windows and it run during office time only
+18. Is the client OK with Cloudflare as the connection provider (traffic is decrypted at Cloudflare's edge), or do they need a private VPN such as Tailscale (paid per user for a business)? (Phase 11) Okay with Cloudflare's edge
+19. Does the owner want phone push alerts (O-14)? iPhone users must add the site to the Home Screen. Yes (Phase 7)
+20. Will company MacBook users run as standard (non-admin) macOS accounts, with the owner holding the admin account? Strongly recommended; developers who need admin rights weaken the blocking.Do whatever is best (Phase 10)
 21. Final LLM model: decided on the client's GPU, not the 6 GB dev laptop. (Phase 11)
