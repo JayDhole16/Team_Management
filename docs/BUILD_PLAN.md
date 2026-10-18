@@ -1,0 +1,74 @@
+# Build Plan — 13 phases
+
+Each phase is one Claude Code session: start fresh (`/clear` or a new `claude`), switch to plan mode (Shift+Tab), run `/phase <n>`, review the plan, approve, let it build, then `/verify`, `/review-phase`, test by hand, commit.
+
+The `/phase` command already tells Claude to read the phase and follow the steps. It also reads docs/MANUAL_TASKS.md and tells you what YOU must do before and after the phase. The "Prompt" below is the extra context you can paste after `/phase <n>` if you want to steer it, or use on its own.
+
+Rough timeline matches the quotation (about 8 weeks): Weeks 1-2 phases 0-3 · Weeks 3-5 phases 4-7 · Weeks 5-7 phases 8-10 · Week 8 phases 11-12.
+
+---
+
+## Phase 0 — Bootstrap monorepo
+**Goal:** a working skeleton everything else plugs into.
+**Prompt:** Set up the monorepo from docs/ARCHITECTURE.md section 3: pnpm workspaces with apps/server, apps/web, apps/agent (placeholder only), packages/shared. TypeScript strict, ESLint, Prettier, Vitest. docker-compose.yml with PostgreSQL 16 only. Prisma in apps/server with an initial empty migration. Root scripts exactly as listed in CLAUDE.md. A GET /api/v1/health endpoint reporting DB status and a Vite page that displays it. Add a short README with quick start.
+**Accept:** fresh clone -> `pnpm install`, `docker compose up -d db`, `pnpm db:migrate`, `pnpm dev` works; health page shows DB OK; `pnpm typecheck && pnpm lint && pnpm test` pass.
+
+## Phase 1 — Auth, invite codes, registration API
+**Goal:** secure login, owner-issued access codes and the registration API (O-9, O-11, O-12, E-0 backend). Read docs/ONBOARDING_FLOW.md first.
+**Prompt:** Implement Prisma models users, job_roles, devices, access_codes, consent_records, audit_log. Seed: owner from env plus the six job roles (idempotent). argon2id passwords. Endpoints: login, refresh, logout, me. RBAC middleware. Access-code service exactly as in docs/ARCHITECTURE.md sections 6 and 10: INVITE codes (10 min, device mode set by owner, optional preset role and note), claim -> registration token (REGISTRATION_WINDOW_MIN), atomic POST /register/complete, revoke, list pending, expiry job. Add the owner-only employee endpoints (list, get, PATCH role/device mode/idle interval 5-120, deactivate/reactivate; deactivation revokes tokens and deletes the face template). Face template upload is accepted but optional while FACE_ENROLLMENT_REQUIRED=false. Recommended (R): password-reset and face-rescan codes. Rate-limit login and claim. Write tests (see below).
+**Accept:** employee token gets 403 on every owner route; wrong, expired, revoked and reused codes all return the same generic error; 6th failed claim from one IP in 15 min is blocked; registration is atomic (a failure leaves no user row); employee cannot set device mode; passwords and codes are never returned or logged; seed can run twice safely.
+
+## Phase 2 — Work sessions and hours
+**Goal:** correct time tracking (E-1, E-2, E-5, O-5).
+**Prompt:** Implement work_sessions and heartbeats. Endpoints: sessions start (idempotent, one open session per user), stop, current; agent heartbeat. A background job auto-closes a session at its last heartbeat when none arrives for SESSION_AUTOCLOSE_AFTER_SEC. Implement services/hours.ts: today total, month total, per-day breakdown, clipped to Asia/Kolkata day and month boundaries. Idle time is logged but not deducted (see PRD open question 1). Accept back-dated heartbeats (client timestamp, at most 12 hours old) and merge them into the session, reopening an auto-closed session when queued heartbeats cover the gap; flag such gaps in reports (ARCHITECTURE section 13, point 7). Unit-test midnight crossing, month boundary, duplicate start, auto-close.
+**Accept:** all hours tests pass; calling start twice never creates two open sessions; owner can read any employee's hours, employee only their own.
+
+## Phase 3 — Web shell, invite UI, registration wizard, timer
+**Goal:** usable login, owner onboarding screens and the first employee screens (E-0 UI, O-9, O-11, E-1, E-2, E-5).
+**Prompt:** React app with login, role-guarded routes, owner layout and employee layout. Follow docs/SCREENS.md for navigation and page contents (build the pages that exist at this phase). Every owner page must be responsive and usable on a phone at 390 px width (SCREENS.md phone layout); run Playwright at a mobile viewport too. Login page has a "Register as employee" section implementing the wizard in docs/ONBOARDING_FLOW.md: one step per screen (code, details, consent, face scan placeholder, success). The face-scan step is a clearly marked placeholder until Phase 9 (honour FACE_ENROLLMENT_REQUIRED). Owner: employees list with role filter and edit (role, device mode, idle interval, deactivate), "Add new employee" modal (device mode required, optional role and note) showing the code once with a 10:00 countdown, Copy and Revoke, plus a Pending invites list. Employee: dashboard with a live timer (derived from server started_at), Stop session / Resume buttons, today and month hours. Login starts the session automatically. Playwright: owner generates code -> employee registers -> logs in -> timer runs -> stop -> resume.
+**Accept:** the code is shown only once; expired and wrong codes show the generic message; refreshing the page keeps the correct timer; employees cannot open owner routes by URL; password is never stored in browser storage; Playwright flow passes.
+
+## Phase 4 — LLM service
+**Goal:** the three Ollama pipelines (L-1..L-3, O-1 backend).
+**Prompt:** My dev machine is a laptop with an RTX 4050 (6 GB VRAM); read docs/DEV_ENVIRONMENT.md. Implement the Ollama client (base URL, timeout, health, thinking disabled, OLLAMA_NUM_CTX) and pipelines P1, P2, P3 exactly as in docs/ARCHITECTURE.md section 7, with Zod schemas in packages/shared, prompts versioned in src/llm/prompts, one retry on invalid JSON, unknown role -> null + needsReview. Endpoints POST /ai/breakdown, /ai/translate-task, /ai/translate-update, GET /ai/health. Mock-client unit tests. Write scripts/llm-eval.ts that runs every sample in docs/llm-eval-samples.md and prints the results. Before finishing, tell me exactly what to install or pull on my laptop (and later on the client's PC) and the command. Default to a 4B-class model, check with `ollama ps` that it runs 100% on the GPU, then compare one 3B and one 8B at Q4 on the eval set and report to run the eval.
+**Accept:** unit tests pass; with Ollama stopped the endpoints return a clean error; I have run the eval on the real GPU PC and judged Hinglish quality (record the chosen model in PROGRESS.md).
+
+## Phase 5 — Projects and tasks
+**Goal:** the owner's core workflow (O-1..O-4, E-3).
+**Prompt:** Follow docs/SCREENS.md for the Projects, Tasks and My tasks pages. Implement projects, tasks, task_status_events. Owner UI: write Hinglish brief -> Generate -> edit/delete/add tasks -> per task "Assign" opens employee search with the task's role pre-selected -> send with project summary. Direct-task flow: pick employee, write plain text, preview technical version, send. Owner task tracking page with filters by employee and status. Employee pages: pending, in-progress, completed, blocked; change status; see project summary. Show clarifying questions when the brief is vague. Handle LLM down gracefully with manual task entry.
+**Accept:** end-to-end Playwright test for brief -> assign -> employee sees task -> completes -> owner sees completed; manual task creation works with Ollama stopped.
+
+## Phase 6 — Progress updates
+**Goal:** employee technical update -> owner plain update (E-4, O-10).
+**Prompt:** Implement progress_updates. Employee form: write technical update, optionally link a task, preview the plain version, send. Owner inbox with unread count, plain text first and the original expandable. Blockers from P3 shown as a highlighted line.
+**Accept:** owner sees only plain text by default; employee cannot read other employees' updates; unread count updates.
+
+## Phase 7 — Realtime status and alerts
+**Goal:** live owner board and the owner-side beep (O-6, O-8).
+**Prompt:** Add Socket.IO with JWT auth and rooms (owner, user:<id>). Derive status from sessions and heartbeats: Working, Idle, On break, Offline. Owner live board. Owner "Enable alerts" button that unlocks audio; on `idle:alert` play a beep and show a toast with the employee's name and reason; alerts list with acknowledge. Employee gets a toast on `task:assigned`. Owner gets a toast on `employee:registered` and `security:alert`. (R) Make the owner dashboard an installable PWA (manifest, service worker) with Web Push (VAPID keys, push_subscriptions) so idle and security alerts reach the phone when the page is closed; show an Add to Home Screen hint on iPhone. Add a dev-only script that simulates heartbeats and idle events so this can be tested without the agent.
+**Accept:** simulated idle event beeps on the owner dashboard with the right name; status flips to Offline after heartbeats stop; alerts persist until acknowledged.
+
+## Phase 8 — Desktop agent core
+**Goal:** installable-style Electron app that tracks time (A-1, A-2).
+**Prompt:** Follow docs/ARCHITECTURE.md section 13 (agent lifecycle). Build apps/agent: Electron with contextIsolation and typed IPC, login window, tray icon with timer, single instance, start at OS login, session start/stop/resume synced with the server, heartbeat every HEARTBEAT_INTERVAL_SEC with an offline queue, and config fetch. Add an OS abstraction layer (idle time, running apps, beep) with macOS, Windows and fake implementations. Show a consent screen on first run. No camera or enforcement yet.
+**Accept:** stop/resume in the tray matches the web dashboard; killing the server for 2 minutes and restarting it loses no heartbeats; closing the agent makes the status Offline and auto-closes the session.
+
+## Phase 9 — Face scan, idle detection and verification
+**Goal:** the monitoring core (A-3, A-4, A-5, A-8, O-7) and the real face step of registration.
+**Prompt:** (a) Spike first: compare two candidate face libraries for accuracy and speed in BOTH a browser and the Electron renderer on a laptop webcam; recommend one in a short note and wait for my OK. (b) Build packages/face (guided capture, quality checks, descriptor, match, model version) and plug it into the registration wizard as the real Step 4; set FACE_ENROLLMENT_REQUIRED=true by default. (c) Server: encrypt the template, store face_model_version, (R) duplicate-face check with a generic rejection and a `security:alert`, and the FACE_RESCAN flow. (d) Implement decideIdleCheck as a pure function exactly as in ARCHITECTURE section 5, with exhaustive unit tests. (e) Scheduler using the employee's idle interval; camera opened only during the check; on-screen indicator while active. (f) On failure: beep and modal on the employee device, POST idle-event, owner is alerted. (g) Handle camera unavailable and permission denied. Never store frames.
+**Accept:** decision tests pass; I have tested with my real face (pass), a different person (FACE_MISMATCH), empty chair (NO_FACE), covered lens (CAMERA_UNAVAILABLE), no input for the window (NO_ACTIVITY); registering the same person twice is rejected; a re-scan code replaces the template; changing the interval in the owner UI changes the schedule at the next sync; no image files exist on disk or on the server.
+
+## Phase 10 — Restricted mode (company MacBooks)
+**Goal:** allowlist enforcement (A-6, A-7, O-9 allowlist part). High risk: it can lock people out.
+**Prompt:** Owner UI to manage allowed apps and domains with sensible defaults (VS Code, Terminal, Docker, Chrome, Excel, MongoDB Compass, Canva, GitHub, etc.). GET /agent/config returns the list and device mode. In the agent: app guard (warn then quit disallowed apps), web guard (local allowlist proxy plus macOS proxy settings via networksetup), tamper detection and tamper events to the server, learn mode (log only), dry-run flag, and scripts/mac-unblock.sh. Enforcement turns on only when the server says COMPANY_MACBOOK (set by the owner) AND the agent runs on macOS; personal devices are never touched. Document the standard-user hardening from ARCHITECTURE section 9. Ask me before running any sudo or networksetup command and explain what it does.
+**Accept:** in dry-run, blocked items are only logged; in enforce mode on a spare Mac user account, a non-allowlisted app and site are blocked and allowlisted ones work; reverting the proxy produces a tamper event and is re-applied; mac-unblock.sh fully restores network settings; personal-mode device is never restricted.
+
+## Phase 11 — Packaging and deployment
+**Goal:** something the client can install (deliverables in the quotation).
+**Prompt:** electron-builder configs for macOS (.dmg) and Windows (.exe). Dockerfile and docker-compose.prod.yml for server + PostgreSQL, serving the built web app. Write docs/DEPLOYMENT.md: installing Ollama on the GPU PC, pulling the chosen model, making Ollama reachable only from the server, Tailscale or Cloudflare Tunnel setup, environment variables, backups (scripts/backup.sh with pg_dump), updating, and macOS permissions (camera, and any others used) and the free distribution route from ARCHITECTURE section 11 (install scripts, ad-hoc signing, no Apple Developer account). Follow ARCHITECTURE section 11 (Cloudflare Tunnel recommended, Tailscale as the alternative) and ask me which operating system the GPU PC runs before choosing how the server reaches Ollama. Add a /downloads page served by the server for the installers, and a server-PC checklist (sleep off, restore after power loss, auto-start of Ollama, Docker and cloudflared, nightly backups, firewall blocking ports 11434 and 5432). Produce a deploy/ folder (production compose file, .env.production.example, install and update scripts) so the system can be installed on the client's PC from docs/DEPLOYMENT.md without Claude Code, and do a dry-run production deployment on my laptop first (docs/DEV_ENVIRONMENT.md).
+**Accept:** a clean machine can follow DEPLOYMENT.md and reach a working system; installers launch and log in against the deployed server.
+
+## Phase 12 — Hardening and handover
+**Goal:** safe to hand to the client.
+**Prompt:** Run /review-phase over the whole codebase and fix Must-fix items. Add a load sanity script simulating 50 agents sending heartbeats. Write docs/QA_CHECKLIST.md for manual tests on a real company MacBook, a personal MacBook and a Windows laptop, including the full registration flow (valid code, expired, revoked, wrong code, reused code, duplicate face, abandoned registration). Write a short owner guide and employee guide in simple English (and Hinglish headings). Seed demo data. Final README.
+**Accept:** no Critical/High security findings open; QA checklist completed on real devices; guides reviewed by me; tag a release.

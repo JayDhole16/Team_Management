@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+pnpm-lock.yaml
+apps/server/src/generated
+apps/server/prisma/migrations
+docs
+.claude
+*.md
