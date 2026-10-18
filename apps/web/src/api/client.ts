@@ -1,47 +1,85 @@
-import { ApiErrorSchema, apiSuccess } from '@lk/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
+import { authSession, type AuthSession } from '../auth/session';
+import { noteServerDate } from './clock';
+import { ApiError, networkError, parseEnvelope } from './errors';
 
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+export { ApiError } from './errors';
 
-export interface ApiGetOptions {
+export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+
+export interface ApiRequestOptions {
+  /** JSON request body. */
+  body?: unknown;
   /** HTTP statuses whose body is still a `{ data }` payload (e.g. 503 from /health). */
   dataStatuses?: number[];
+  /** false for public endpoints: no Bearer header and no refresh on 401. Default true. */
+  auth?: boolean;
   fetchImpl?: typeof fetch;
+  session?: AuthSession;
 }
 
-/** GET a `/api/v1` path and validate the `{ data }` envelope with Zod. */
-export async function apiGet<T extends z.ZodType>(
+/**
+ * Calls a `/api/v1` path and validates the `{ data }` envelope with Zod. Signed-in calls carry
+ * the in-memory access token; on 401 the token is refreshed once and the call retried once.
+ */
+export async function apiRequest<T extends z.ZodType>(
+  method: HttpMethod,
   path: string,
   schema: T,
-  options: ApiGetOptions = {},
+  options: ApiRequestOptions = {},
 ): Promise<z.infer<T>> {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  let res: Response;
-  try {
-    res = await fetchImpl(`/api/v1${path}`, { headers: { Accept: 'application/json' } });
-  } catch {
-    throw new ApiError(0, 'NETWORK_ERROR', 'Cannot reach the server.');
+  const fetchImpl = options.fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
+  const session = options.session ?? authSession;
+  const useAuth = options.auth ?? true;
+
+  const send = async (): Promise<Response> => {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+    const token = useAuth ? session.getToken() : null;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    try {
+      const res = await fetchImpl(`/api/v1${path}`, {
+        method,
+        headers,
+        credentials: 'same-origin',
+        ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+      });
+      noteServerDate(res.headers.get('Date'));
+      return res;
+    } catch {
+      throw networkError();
+    }
+  };
+
+  let res = await send();
+  if (useAuth && res.status === 401) {
+    const refreshed = await session.refresh();
+    if (!refreshed) {
+      throw new ApiError(401, 'UNAUTHORIZED', 'Your session has ended. Please log in again.');
+    }
+    res = await send();
   }
-
-  const body: unknown = await res.json().catch(() => undefined);
-
-  if (res.ok || options.dataStatuses?.includes(res.status)) {
-    const envelope = apiSuccess(z.unknown()).safeParse(body);
-    const parsed = envelope.success ? schema.safeParse(envelope.data.data) : undefined;
-    if (parsed?.success) return parsed.data;
-    throw new ApiError(res.status, 'INVALID_RESPONSE', 'The server sent an unexpected response.');
-  }
-
-  const err = ApiErrorSchema.safeParse(body);
-  if (err.success) throw new ApiError(res.status, err.data.error.code, err.data.error.message);
-  throw new ApiError(res.status, 'HTTP_ERROR', `Request failed (${res.status}).`);
+  return parseEnvelope(res, schema, options.dataStatuses);
 }
+
+type Opts = Omit<ApiRequestOptions, 'body'>;
+
+export const apiGet = <T extends z.ZodType>(path: string, schema: T, options?: Opts) =>
+  apiRequest('GET', path, schema, options);
+
+export const apiPost = <T extends z.ZodType>(
+  path: string,
+  schema: T,
+  body?: unknown,
+  options?: Opts,
+) => apiRequest('POST', path, schema, { ...options, body });
+
+export const apiPatch = <T extends z.ZodType>(
+  path: string,
+  schema: T,
+  body: unknown,
+  options?: Opts,
+) => apiRequest('PATCH', path, schema, { ...options, body });
+
+export const apiDelete = <T extends z.ZodType>(path: string, schema: T, options?: Opts) =>
+  apiRequest('DELETE', path, schema, options);

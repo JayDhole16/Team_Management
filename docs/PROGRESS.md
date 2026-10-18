@@ -7,7 +7,7 @@ Update this at the end of every phase (the `/phase` command does it).
 | 0 | Bootstrap monorepo | done | 2026-10-18 | pnpm monorepo, Postgres 16 in Docker, Prisma empty migration, /api/v1/health + status page. See "Phase 0" below. |
 | 1 | Auth, invite codes, registration API | done | 2026-10-18 | Login/refresh/RBAC, access codes, atomic registration, employee admin, recovery codes. See "Phase 1" below. |
 | 2 | Work sessions and hours | done | 2026-10-18 | Sessions (idempotent start, DB-enforced one open per user), heartbeats with offline replay, auto-close job, IST hours service, hours reports. See "Phase 2" below. |
-| 3 | Web shell, invite UI, registration wizard, timer | todo | | |
+| 3 | Web shell, invite UI, registration wizard, timer | done | 2026-10-19 | Login, role-guarded owner/employee layouts, invite code UI, 5-step registration wizard, forgot password, employee timer; Playwright on desktop and 390 px. See "Phase 3" below. |
 | 4 | LLM service | todo | | |
 | 5 | Projects and tasks | todo | | |
 | 6 | Progress updates | todo | | |
@@ -109,6 +109,77 @@ Update this at the end of every phase (the `/phase` command does it).
 - Prisma's generated types list `userId` as a unique key of WorkSession because of the partial index. The code never uses `findUnique` by userId (`findOpen` uses `findFirst`).
 - If the server is down past the 3 min / 12 h limits, a session stays open until the job runs at the next start (it runs immediately on boot); a Stop in that window ends it at the Stop time.
 
+## Phase 3 — Web shell, invite UI, registration wizard, timer (done 2026-10-19)
+**Built**
+- React Router 8 (`createBrowserRouter`) with role guards (`auth/access.ts` `decideAccess`, `auth/guards.tsx`). Nothing renders while the user is unknown, so owner pages never flash for an employee (checked in e2e with a MutationObserver). The server stays the real enforcement.
+- Auth in the browser (`auth/session.ts`):
+  - The access token is kept in memory only. Page load restores it with `POST /auth/refresh` (httpOnly cookie). Nothing goes to localStorage or sessionStorage (e2e asserts no password and no JWT in storage).
+  - Refreshes never overlap: one in-flight promise per tab, plus a Web Lock (`lk-auth-refresh`) across tabs. The server signs out every device when a refresh token is reused.
+  - A 401 refreshes once and retries once.
+  - Logout runs under the same lock and waits for any running refresh. A sign-out bumps an epoch, so a refresh that finishes later cannot sign the tab back in. A BroadcastChannel signs out the other tabs. If the server cannot be reached, logout fails visibly instead of leaving the cookie behind.
+  - The query cache is cleared whenever the user changes.
+- API client: `apiRequest` (GET/POST/PATCH/DELETE), Zod-validated envelopes, one module per resource, and a server clock offset from the `Date` header (used by code countdowns).
+- Public pages: Login | Register as employee | Forgot password (reset code + new password).
+- Registration wizard (`pages/register/`), one step per screen:
+  - Steps: code, details, consent, face scan placeholder, done.
+  - It uses a pure reducer. The password and token live in React state only and are wiped on success.
+  - Every invalid code shows the one generic message, `INVALID_CODE_MESSAGE`, now exported from `@lk/shared` and used by the server too.
+  - The device type is read-only, with a confirm tick that is never sent.
+  - The role is locked when the owner preset it.
+  - `EMAIL_TAKEN` returns to details; an expired registration restarts at the code step; `CONSENT_OUTDATED` reloads the consent text.
+  - Leaving mid-way (reload, tab close, in-app navigation, Back) asks first.
+- Owner:
+  - Overview: active employees, invites waiting, Add new employee.
+  - Employees: role/status filter, hours today and this month; a table on desktop, cards on phones.
+  - Employee page: profile; hours (today, month, per-day list with plain-English flags, sessions); settings that PATCH only the changed fields (`employeePatch.ts`); password-reset code; deactivate/reactivate with confirm.
+  - Invites: status, time left and Revoke; refreshes every 10 s; never shows codes.
+  - More: phone tab.
+  - Below 768 px a bottom tab bar replaces the left menu (Overview, Employees, Invites, More).
+- "Add new employee" modal:
+  - Device type is required with no default; the role (locked for the employee) and the note are optional.
+  - Shows the code once, with a 10:00 countdown, Copy and Revoke.
+  - The code lives only in a `gcTime: 0` mutation and is cleared when the modal closes.
+  - The modal cannot close while the code is still being created.
+- Employee:
+  - My Day:
+    - The timer comes from the server's `startedAt`/`serverTime`, so a reload keeps it.
+    - Stop session (break) / Resume.
+    - Today and month totals stop growing at India midnight and at month end, then refetch.
+    - Badges: Working / On break, agent running / not running, face enrolled.
+  - My hours: month picker, per-day list, sessions.
+  - Profile.
+  - Login starts the session (E-1).
+- All dates and times are shown in Asia/Kolkata.
+- Tests:
+  - Web unit tests: 64 in 5 files (api client, auth session including the logout/refresh races, timer and time, wizard and validation, employee patch).
+  - Playwright `pnpm test:e2e`: 12 tests on desktop and a 390×844 phone. Runs on its own API (port 4100), its own web server (5174) and a fresh `<db>_e2e` database. Covers:
+    - owner code → employee registers → logs in → timer runs → reload → stop → resume;
+    - wrong and revoked codes give the generic message;
+    - guards and logout;
+    - no side-scroll on a phone, and 44 px buttons.
+- Reviews:
+  - security-reviewer: 1 High (logout could race a token refresh, which the server treats as token reuse), plus M1 (failed logout), M2 (tunnel host now needs `LK_TUNNEL=1`), L1, L3 and L4. All fixed.
+  - code-reviewer: no Must-fix; Should-fix items fixed.
+
+**Deviations from the plan**
+- React Router is v8 (current major), not v7. `RouterProvider` comes from `react-router/dom`.
+- New dev dependencies: `@playwright/test` (in the stack) and `@types/node` (types for the Playwright config). No jsdom or Testing Library: UI behaviour is covered by Playwright and pure logic by Vitest.
+- No server API changes. Server-side additions:
+  - `INVALID_CODE_MESSAGE` moved to `@lk/shared`;
+  - `apps/server/src/test/e2e-server.ts` (`pnpm --filter server e2e:serve`), which only ever drops or creates a database named `*_e2e`.
+- Per-day hours list only the days with logged time; empty days are not filled in.
+- The Employees list makes one `/reports/hours/today` request per employee and does not poll. Add a batched endpoint, or put the totals in `GET /employees`, by Phase 7 when live status arrives.
+- "Issue face re-scan code" is shown but disabled until Phase 9, because no screen accepts that code yet.
+- Deferred:
+  - owner toast on registration (needs Socket.IO, Phase 7);
+  - change password while logged in (no endpoint; use a reset code);
+  - agent download links (Phase 11);
+  - "enter a face re-scan code" on the Profile page (Phase 9).
+- Open from the security review (later phases):
+  - Server-side second layer for the High finding: record why a refresh token was revoked (rotated vs logout), and treat only a rotated token as reuse. Do it in Phase 8 with device tokens, or in Phase 12.
+  - Without Web Locks (plain http on a LAN IP, very old Safari), two tabs loading at once can still trigger reuse detection. Production is HTTPS only. Consider a short server grace window in Phase 12.
+- The phone tunnel needs `LK_TUNNEL=1 pnpm dev` (Vite `allowedHosts`). DEV_ENVIRONMENT.md says to tunnel port 4000, but until the server serves the built web app (Phase 11), tunnel 5173 instead.
+
 ## Decisions
 (Record decisions made with the client, e.g. answers to PRD open questions.)
 Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The ones that affect the build:
@@ -147,4 +218,12 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [ ] Phase 2: with `pnpm dev` running, use the README "Sessions and hours" curl commands as a registered employee: start twice (same id), stop, start again (new id), then `reports/hours/today`, and check that the totals match the time on your watch.
 - [ ] Phase 2: leave a session open past midnight IST (start around 23:50, check after 00:10). `reports/hours?month=...` must show the time split between the two dates, and `reports/hours/today` must count only the time after midnight.
 - [ ] Phase 2: as the owner, `reports/hours?userId=<employee id>` works; with the employee token and another employee's id you get 403.
+- [ ] Phase 3: with `pnpm dev` running, click through as the owner:
+  - Add new employee, copy the code, watch the countdown, revoke one, check Invites.
+  - In a private window: register with a code, log in, check the timer, Stop and Resume.
+  - Try a wrong code: it must say "This code is invalid or has expired".
+- [ ] Phase 3: open the owner pages on your phone. In Git Bash run `LK_TUNNEL=1 pnpm dev`, then `cloudflared tunnel --url http://localhost:5173`, and open the https address. Check the bottom tab bar and the Add new employee modal. Close the tunnel afterwards.
+- [ ] Phase 3: show the built pages (and docs/SCREENS.md) to the client and note changes.
+- [ ] Phase 3 [LEGAL]: the wizard still shows the draft consent text v2026-10-v2 (`packages/shared/src/schemas/consent.ts`). Replace it with the approved wording before real use.
+- [ ] Phase 3: with the Docker db running, `pnpm test:e2e` should pass. Chromium is already installed on this laptop; on another machine run `pnpm --filter web exec playwright install chromium` once first.
 - [ ] Phase 11: behind Cloudflare Tunnel, set `TRUST_PROXY=true` and use the real client IP (CF-Connecting-IP); otherwise every request looks like one IP and the per-IP limits act globally.

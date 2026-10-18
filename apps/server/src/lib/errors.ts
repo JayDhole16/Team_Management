@@ -1,3 +1,5 @@
+import { INVALID_CODE_MESSAGE } from '@lk/shared';
+
 /** Expected failures. The error handler turns them into `{ error: { code, message } }`. */
 export class AppError extends Error {
   constructor(
@@ -10,9 +12,7 @@ export class AppError extends Error {
   }
 }
 
-/** The ONE message for every access-code failure: wrong, expired, revoked, used, wrong purpose. */
-export const INVALID_CODE_MESSAGE =
-  'This code is invalid or has expired. Ask the owner for a new one.';
+export { INVALID_CODE_MESSAGE };
 
 export const invalidCode = () => new AppError(400, 'INVALID_CODE', INVALID_CODE_MESSAGE);
 export const rateLimited = () =>

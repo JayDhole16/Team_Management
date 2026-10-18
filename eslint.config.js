@@ -11,6 +11,8 @@ export default defineConfig([
     '**/build/**',
     '**/coverage/**',
     'apps/server/src/generated/**',
+    '**/playwright-report/**',
+    '**/test-results/**',
   ]),
   js.configs.recommended,
   tseslint.configs.strict,

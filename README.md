@@ -16,7 +16,14 @@ pnpm db:seed              # six job roles + the owner account; safe to run again
 pnpm dev                  # API on http://localhost:4000, web on http://localhost:5173
 ```
 
-Open http://localhost:5173. The status page should show **Server: OK** and **Database: OK**.
+Open http://localhost:5173 and log in with your OWNER_EMAIL / OWNER_PASSWORD. http://localhost:5173/status shows **Server: OK** and **Database: OK**.
+
+## Using the web app (Phase 3)
+
+- **Owner:** Overview, Employees (role/status filter, hours today and this month, employee page with settings, reset and re-scan codes, deactivate) and Invites. "Add new employee" asks for the device type and shows a one-time code with a 10-minute countdown. The code is never shown again.
+- **New employee:** on the login page, "Register as employee": code, details, consent, face scan (a placeholder until Phase 9), done.
+- **Employee:** logging in starts the work session. My Day shows the timer with Stop session (break) and Resume, plus hours today and this month. My hours has the per-day list.
+- **Phone:** below 768 px the menu becomes a bottom tab bar. To try it on a real phone, start the dev server with `LK_TUNNEL=1 pnpm dev` (Git Bash), run `cloudflared tunnel --url http://localhost:5173` and open the https address it prints. This is for testing only: the address changes every run, anyone with it can reach your dev server, so close the tunnel afterwards. Never set `TRUST_PROXY=true` for a quick tunnel.
 
 After pulling a change that adds new keys to `.env.example`, run `pnpm env:setup --add-missing`. It appends only the missing keys, generates random secrets for them and never prints values.
 
@@ -24,9 +31,11 @@ After pulling a change that adds new keys to `.env.example`, run `pnpm env:setup
 
 `pnpm test` needs the Docker database running (`docker compose up -d db`). Server tests use a separate database `<POSTGRES_DB>_test` on the same server, created and migrated automatically. Your dev data is never touched.
 
-## Trying the API with curl (Phases 1-2)
+End-to-end tests (Playwright, desktop and 390 px phone): `pnpm test:e2e`. Run `pnpm --filter web exec playwright install chromium` once first. They start their own API on port 4100 and web server on port 5174 against a fresh `<POSTGRES_DB>_e2e` database (re-created every run), so a running `pnpm dev` is not disturbed. Failure traces go to `apps/web/test-results/`; the HTML report is in `apps/web/playwright-report/`.
 
-There is no UI for this yet (Phase 3). In Git Bash, from the repo root:
+## Trying the API with curl
+
+The web app covers all of this; curl is handy for debugging. In Git Bash, from the repo root:
 
 ```bash
 API=http://localhost:4000/api/v1
@@ -80,6 +89,7 @@ Once a session has had a heartbeat, it closes itself 3 minutes (`SESSION_AUTOCLO
 | `pnpm dev` | Server (auto-restarts on change) and web app together |
 | `pnpm agent:dev` | Desktop agent (placeholder until Phase 8) |
 | `pnpm typecheck` / `pnpm lint` / `pnpm test` | Checks. Run all three before calling a task done |
+| `pnpm test:e2e` | Playwright end-to-end tests (needs the Docker db and the Chromium download) |
 | `pnpm --filter server test` | Tests for one package |
 | `pnpm db:migrate` / `pnpm db:seed` | Prisma migrations / seed data |
 | `pnpm format` | Format all files with Prettier |
@@ -100,6 +110,7 @@ scripts/        Ops scripts
 |---|---|
 | 4000 | API server (`GET /api/v1/health`) |
 | 5173 | Web app (Vite dev server; proxies `/api` to 4000) |
+| 4100 / 5174 | API / web started by `pnpm test:e2e` only |
 | 5434 | PostgreSQL in Docker (bound to 127.0.0.1 only). Change `DB_PORT` and the port in `DATABASE_URL` in `.env` if it is taken |
 
 ## Troubleshooting

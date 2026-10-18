@@ -6,6 +6,10 @@ export const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 export const CODE_LENGTH = 8;
 export const CODE_TTL_MINUTES = 10;
 
+/** The ONE message for every access-code failure: wrong, expired, revoked, used, wrong purpose. */
+export const INVALID_CODE_MESSAGE =
+  'This code is invalid or has expired. Ask the owner for a new one.';
+
 /** Uppercases and strips dashes/spaces so `k7m4-q9xb` matches `K7M4Q9XB`. */
 export function normalizeCode(input: string): string {
   return input.toUpperCase().replace(/[\s-]/g, '');

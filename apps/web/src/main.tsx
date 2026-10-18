@@ -1,10 +1,13 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { RouterProvider } from 'react-router/dom';
+import { createQueryClient } from './app/queryClient';
+import { router } from './app/router';
+import { AuthProvider } from './auth/AuthProvider';
 import './index.css';
-import { HealthPage } from './pages/HealthPage';
 
-const queryClient = new QueryClient();
+const queryClient = createQueryClient();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Missing #root element');
@@ -12,7 +15,9 @@ if (!root) throw new Error('Missing #root element');
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <HealthPage />
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -1,4 +1,5 @@
 import { useHealth } from '../hooks/useHealth';
+import { formatTime } from '../lib/time';
 
 type Tone = 'ok' | 'bad' | 'wait';
 
@@ -50,7 +51,7 @@ export function HealthPage() {
         </div>
         {hint && <p className="text-sm text-red-700">{hint}</p>}
         <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>{data ? `Last checked ${new Date(data.time).toLocaleTimeString()}` : ''}</span>
+          <span>{data ? `Last checked ${formatTime(data.time)}` : ''}</span>
           <button
             type="button"
             onClick={() => void refetch()}

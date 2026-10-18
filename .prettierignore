@@ -8,3 +8,5 @@ apps/server/prisma/migrations
 docs
 .claude
 *.md
+playwright-report
+test-results

@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "e2e:serve": "tsx src/test/e2e-server.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",
