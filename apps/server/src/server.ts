@@ -1,5 +1,8 @@
 import { buildApp } from './app';
 import { loadEnv } from './config/env';
+import { loggerOptions } from './config/logger';
+import { startExpireCodesJob } from './jobs/expire-codes';
+import { createDataAccess } from './repositories';
 import { createHealthRepository } from './repositories/health.repository';
 import { createPrismaClient } from './repositories/prisma';
 
@@ -7,17 +10,20 @@ const env = loadEnv();
 const prisma = createPrismaClient(env.DATABASE_URL);
 
 const app = buildApp(
-  { healthRepo: createHealthRepository(prisma) },
-  {
-    logger: {
-      level: env.LOG_LEVEL,
-      redact: ['req.headers.authorization', 'req.headers.cookie'],
-    },
-  },
+  { healthRepo: createHealthRepository(prisma), data: createDataAccess(prisma), env },
+  { logger: loggerOptions(env.LOG_LEVEL) },
 );
+
+const bus = app.serviceContext.bus;
+// Socket.IO delivers these to the owner in Phase 7; for now they are logged (no secrets in them).
+bus.on('employee:registered', (e) => app.log.info({ userId: e.userId }, 'employee registered'));
+bus.on('security:alert', (e) => app.log.warn({ kind: e.kind }, `security alert: ${e.message}`));
+
+const stopExpireJob = startExpireCodesJob(app.serviceContext, app.log);
 
 async function shutdown(signal: string) {
   app.log.info(`${signal} received, shutting down`);
+  stopExpireJob();
   await app.close();
   await prisma.$disconnect();
   process.exit(0);

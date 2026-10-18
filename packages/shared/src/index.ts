@@ -1,3 +1,10 @@
 export * from './schemas/api';
+export * from './schemas/auth';
+export * from './schemas/codes';
+export * from './schemas/common';
+export * from './schemas/consent';
+export * from './schemas/employees';
 export * from './schemas/health';
+export * from './schemas/password';
+export * from './schemas/register';
 export type * from './types';

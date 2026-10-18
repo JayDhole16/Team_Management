@@ -11,10 +11,46 @@ pnpm install              # installs everything and generates the Prisma client
 pnpm env:setup            # creates .env from .env.example with random secrets (never commit .env)
 docker compose up -d db   # PostgreSQL 16 on localhost:5434
 pnpm db:migrate           # applies database migrations
+# Set your real OWNER_EMAIL and a strong OWNER_PASSWORD in .env first (seed never changes them later)
+pnpm db:seed              # six job roles + the owner account; safe to run again
 pnpm dev                  # API on http://localhost:4000, web on http://localhost:5173
 ```
 
 Open http://localhost:5173. The status page should show **Server: OK** and **Database: OK**.
+
+After pulling a change that adds new keys to `.env.example`, run `pnpm env:setup --add-missing`. It appends only the missing keys, generates random secrets for them and never prints values.
+
+## Tests
+
+`pnpm test` needs the Docker database running (`docker compose up -d db`). Server tests use a separate database `<POSTGRES_DB>_test` on the same server, created and migrated automatically. Your dev data is never touched.
+
+## Trying the API with curl (Phase 1)
+
+There is no UI for this yet (Phase 3). In Git Bash, from the repo root:
+
+```bash
+API=http://localhost:4000/api/v1
+# 1. Owner login (use your OWNER_EMAIL / OWNER_PASSWORD from .env)
+OWNER=$(curl -s -X POST $API/auth/login -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","password":"YOUR_OWNER_PASSWORD"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).data.accessToken')
+# 2. Invite code (shown once, valid 10 minutes)
+curl -s -X POST $API/codes/invite -H "authorization: Bearer $OWNER" -H 'content-type: application/json' \
+  -d '{"deviceMode":"PERSONAL","note":"test employee"}'
+# 3. Claim it (any wrong, expired, revoked or used code gives the same error)
+curl -s -X POST $API/register/claim -H 'content-type: application/json' -d '{"code":"XXXX-XXXX"}'
+# 4. Pending invites, and revoke one
+curl -s $API/codes -H "authorization: Bearer $OWNER"
+curl -s -X DELETE $API/codes/<id> -H "authorization: Bearer $OWNER"
+# 5. Job roles (for jobRoleId) and consent version
+curl -s $API/job-roles -H "authorization: Bearer $OWNER"
+curl -s $API/register/consent
+# 6. Finish registration with the registrationToken from step 3
+curl -s -X POST $API/register/complete -H 'content-type: application/json' -d '{
+  "token":"<registrationToken>","name":"Test Employee","email":"test.employee@example.com",
+  "password":"Mango-River-Lamp-73","jobRoleId":"<id>","phone":"+91 98765 43210",
+  "emergencyContactName":"Someone","emergencyContactPhone":"+91 91234 56789",
+  "consentAccepted":true,"consentVersion":"2026-10-v1"}'
+```
 
 ## Commands
 
@@ -50,4 +86,6 @@ scripts/        Ops scripts
 - **Database: Down** on the status page: start Docker Desktop, then `docker compose up -d db`.
 - **`ports are not available` / `port is already allocated`** when starting the db: another PostgreSQL uses that port. Pick a free one for `DB_PORT` in `.env` and use the same port in `DATABASE_URL`.
 - **Port 4000 or 5173 already in use** after a crash: an old dev process is still running. Close the old terminal, or on Windows find it with `netstat -ano | findstr :4000` and stop it with `taskkill /PID <pid> /F`.
-- **`Invalid environment configuration`** when the server starts: `.env` is missing or a value is wrong. The message names the variable.
+- **`Invalid environment configuration`** when the server starts: `.env` is missing or a value is wrong. The message names the variable. After an update, run `pnpm env:setup --add-missing`.
+- **`Cannot reach PostgreSQL for tests`**: start the database with `docker compose up -d db`.
+- **`Too many attempts`** (429) on claim or login: 5 wrong codes or 10 wrong logins from one address in 15 minutes. Wait 15 minutes, or restart the server in development (the counter is in memory).

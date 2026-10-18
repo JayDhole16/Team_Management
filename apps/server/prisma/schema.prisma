@@ -1,4 +1,4 @@
-// Data model is added from Phase 1 on (see docs/ARCHITECTURE.md section 4).
+// Data model: docs/ARCHITECTURE.md section 4. Tables use snake_case names.
 // The connection URL lives in prisma.config.ts (Prisma 7).
 
 generator client {
@@ -8,4 +8,173 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum UserRole {
+  OWNER
+  EMPLOYEE
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+enum DeviceMode {
+  COMPANY_MACBOOK
+  PERSONAL
+}
+
+enum CodePurpose {
+  INVITE
+  PASSWORD_RESET
+  FACE_RESCAN
+}
+
+enum CodeStatus {
+  ACTIVE
+  CLAIMED
+  USED
+  EXPIRED
+  REVOKED
+}
+
+model User {
+  id                    String      @id @default(uuid()) @db.Uuid
+  /// Always stored lowercased (emails compare case-insensitively).
+  email                 String      @unique
+  name                  String
+  phone                 String?
+  emergencyContactName  String?     @map("emergency_contact_name")
+  emergencyContactPhone String?     @map("emergency_contact_phone")
+  /// Calendar date in Asia/Kolkata. Owner-only field.
+  joiningDate           DateTime    @map("joining_date") @db.Date
+  passwordHash          String      @map("password_hash")
+  role                  UserRole
+  status                UserStatus  @default(ACTIVE)
+  jobRoleId             String?     @map("job_role_id") @db.Uuid
+  /// Owner-only. Null for the owner account.
+  deviceMode            DeviceMode? @map("device_mode")
+  idleIntervalMin       Int         @default(20) @map("idle_interval_min")
+  /// AES-256-GCM encrypted (iv | tag | ciphertext). Never logged, never returned.
+  faceTemplate          Bytes?      @map("face_template")
+  faceModelVersion      String?     @map("face_model_version")
+  faceEnrolledAt        DateTime?   @map("face_enrolled_at")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+  deactivatedAt         DateTime?   @map("deactivated_at")
+
+  jobRole         JobRole?        @relation(fields: [jobRoleId], references: [id])
+  devices         Device[]
+  refreshTokens   RefreshToken[]
+  consentRecords  ConsentRecord[]
+  codesCreated    AccessCode[]    @relation("CodeCreatedBy")
+  codesTargeted   AccessCode[]    @relation("CodeTarget")
+  codesRegistered AccessCode[]    @relation("CodeRegistered")
+  auditEntries    AuditLog[]
+
+  @@index([role, status])
+  @@map("users")
+}
+
+model JobRole {
+  id    String @id @default(uuid()) @db.Uuid
+  key   String @unique
+  label String
+
+  users       User[]
+  presetCodes AccessCode[]
+
+  @@map("job_roles")
+}
+
+model Device {
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  os           String
+  hostname     String
+  agentVersion String     @map("agent_version")
+  mode         DeviceMode
+  lastSeenAt   DateTime?  @map("last_seen_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("devices")
+}
+
+model AccessCode {
+  id               String      @id @default(uuid()) @db.Uuid
+  purpose          CodePurpose
+  /// HMAC-SHA256 of the normalized code (keyed with CODE_HASH_SECRET). The code itself is never stored.
+  codeHash         String      @unique @map("code_hash")
+  createdById      String      @map("created_by") @db.Uuid
+  /// PASSWORD_RESET / FACE_RESCAN: the employee the code is for.
+  targetUserId     String?     @map("target_user_id") @db.Uuid
+  presetJobRoleId  String?     @map("preset_job_role_id") @db.Uuid
+  /// INVITE only. Chosen by the owner; the employee can never change it.
+  deviceMode       DeviceMode? @map("device_mode")
+  note             String?
+  expiresAt        DateTime    @map("expires_at")
+  status           CodeStatus  @default(ACTIVE)
+  claimedAt        DateTime?   @map("claimed_at")
+  /// HMAC-SHA256 of the registration token handed out at claim.
+  claimTokenHash   String?     @unique @map("claim_token_hash")
+  claimExpiresAt   DateTime?   @map("claim_expires_at")
+  usedAt           DateTime?   @map("used_at")
+  /// The user created by this INVITE (makes /register/complete idempotent).
+  registeredUserId String?     @unique @map("registered_user_id") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at")
+
+  createdBy      User     @relation("CodeCreatedBy", fields: [createdById], references: [id])
+  targetUser     User?    @relation("CodeTarget", fields: [targetUserId], references: [id])
+  registeredUser User?    @relation("CodeRegistered", fields: [registeredUserId], references: [id])
+  presetJobRole  JobRole? @relation(fields: [presetJobRoleId], references: [id])
+
+  @@index([status, expiresAt])
+  @@map("access_codes")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// HMAC-SHA256 of the token (keyed with REFRESH_TOKEN_SECRET).
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model ConsentRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  consentVersion String   @map("consent_version")
+  acceptedAt     DateTime @map("accepted_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("consent_records")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  action      String
+  entity      String
+  entityId    String?  @map("entity_id")
+  meta        Json     @default("{}")
+  at          DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([at])
+  @@index([entity, entityId])
+  @@map("audit_log")
 }
