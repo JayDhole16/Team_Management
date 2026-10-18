@@ -12,7 +12,7 @@ import { PasswordSchema } from './password';
 
 /**
  * A face template computed on the employee's own device. Only these numbers leave the
- * device; images never do. The exact descriptor length depends on the face library (Phase 9).
+ * device; images never do (the one profile photo, PRD Q13, is a separate field from Phase 9). The exact descriptor length depends on the face library (Phase 9).
  */
 export const FaceTemplateSchema = z
   .object({

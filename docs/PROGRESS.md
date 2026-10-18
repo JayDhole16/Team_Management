@@ -117,14 +117,14 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - Q3: client GPU is an RTX 3050 with 4 GB VRAM.
 - Q4: initial allowlist: Antigravity, Docker, GitHub, VS Code, Render, MongoDB, ChatGPT, Claude, Groq, Vercel, Hostinger, Railway, Excel.
 - Q5: no MDM.
-- Q6: employees also sign a paper consent form. The in-app consent text (`packages/shared/src/schemas/consent.ts`) is a draft until the client sends wording.
+- Q6: employees also sign a paper consent form. The draft in-app consent text (`packages/shared/src/schemas/consent.ts`, version 2026-10-v1) was sent to the client (2026-10-18). It said images are never stored, which Q13 contradicts, so the text is now version 2026-10-v2 with a profile-photo paragraph; the client must approve v2.
 - Q7: renders, exports and similar work count as background activity.
 - Q8: not answered; default English.
 - Q9: no target hours; show work days/hours.
 - Q10, Q18: Cloudflare Tunnel; client is OK with Cloudflare's edge.
 - Q11: registration window is 30 min.
 - Q12: no owner approval. The owner gets a notification with the new employee's details.
-- Q13: client wants a stored profile photo. **This conflicts with CLAUDE.md rule 1 (never store images). Unresolved; decide before Phase 9.**
+- Q13 (decided 2026-10-18): store ONE profile photo per employee. This is an exception to CLAUDE.md rule 1 (never store images). Safeguards (CLAUDE.md rule 1, ARCHITECTURE §6, updated 2026-10-18): the employee sees and confirms the photo; small JPEG (max 512x512, under 200 KB); AES-256-GCM in the DB, never a file; owner-only `GET /employees/:id/photo`; never logged; replaced on re-scan; deleted on deactivation. Built in Phase 9.
 - Q14: not answered; default: the employee picks a role unless the owner preset one (then it is locked).
 - Q15 (detail decided 2026-10-18): phone and emergency contact (name + phone) are required at registration. Joining date is owner-only and defaults to the registration date.
 - Q16: (R) items in scope: password-reset and face-rescan codes, duplicate-face check, audit log.
@@ -140,8 +140,10 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [x] Before Phase 1: get the client's answers to docs/PRD.md section 5 (at least 1, 3, 5, 11-18) and write them under Decisions.
 - [ ] Phase 1: put your real OWNER_EMAIL and a strong OWNER_PASSWORD (10+ chars, not common, must not contain the email name) in `.env`, THEN run `pnpm db:seed` twice. The second run must say "Owner account already exists". Seed never changes the owner later, so get the email right first.
 - [ ] Phase 1: by hand with curl (README "Trying the API with curl"): a wrong code, an expired code (wait 10 min), a revoked code and a reused code all return the same "This code is invalid or has expired" message; complete a registration and log in as that employee; `GET /api/v1/employees` with the employee token returns 403.
-- [ ] Phase 1: decide PRD Q13 (profile photo) vs CLAUDE.md rule 1 before Phase 9.
-- [ ] Phase 1: send the client the draft consent text (`packages/shared/src/schemas/consent.ts`) for approval (PRD Q6).
+- [x] Phase 1: decide PRD Q13 (profile photo) vs CLAUDE.md rule 1 before Phase 9. Decided: store one profile photo.
+- [x] Q13 follow-up: CLAUDE.md rule 1, ARCHITECTURE, ONBOARDING_FLOW, BUILD_PLAN Phase 9, security-reviewer and the consent text updated for the profile-photo exception (2026-10-18).
+- [ ] Send the client the revised consent text v2026-10-v2 (`packages/shared/src/schemas/consent.ts`, new profile-photo paragraph) and get approval; the paper consent form should say the same.
+- [x] Phase 1: send the client the draft consent text (`packages/shared/src/schemas/consent.ts`) for approval (PRD Q6). Sent 2026-10-18.
 - [ ] Phase 2: with `pnpm dev` running, use the README "Sessions and hours" curl commands as a registered employee: start twice (same id), stop, start again (new id), then `reports/hours/today`, and check that the totals match the time on your watch.
 - [ ] Phase 2: leave a session open past midnight IST (start around 23:50, check after 00:10). `reports/hours?month=...` must show the time split between the two dates, and `reports/hours/today` must count only the time after midnight.
 - [ ] Phase 2: as the owner, `reports/hours?userId=<employee id>` works; with the employee token and another employee's id you get 403.

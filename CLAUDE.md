@@ -38,7 +38,7 @@ Deep docs (read only the one you need; do not load all of them):
 - If unsure about a library API, check its current docs instead of guessing.
 
 ## Non-negotiable rules
-1. Camera frames are processed on the employee's own device only (browser or desktop agent). NEVER store or upload images or video. Only results (present / match / score) leave the laptop. Show an on-screen indicator whenever the camera is active.
+1. Camera frames are processed on the employee's own device only (browser or desktop agent). NEVER store or upload images or video, with ONE exception (PRD Q13): a single profile photo per employee, taken at enrollment or re-scan after the employee has seen it. It is encrypted at rest (AES-256-GCM, like templates), served only by an owner-only endpoint, never logged, replaced on re-scan and deleted on deactivation. Idle/presence checks never upload images: only results (present / match / score) leave the laptop. Show an on-screen indicator whenever the camera is active.
 2. Face templates are encrypted at rest (AES-256-GCM, key from env). Never log them.
 3. The LLM is local Ollama only. No external AI APIs. LLM output is untrusted: validate against a schema and render as plain text, never as HTML.
 4. If the LLM is down the app still works (tasks can be written manually) and shows a clear message.

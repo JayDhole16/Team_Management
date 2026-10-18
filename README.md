@@ -49,7 +49,7 @@ curl -s -X POST $API/register/complete -H 'content-type: application/json' -d '{
   "token":"<registrationToken>","name":"Test Employee","email":"test.employee@example.com",
   "password":"Mango-River-Lamp-73","jobRoleId":"<id>","phone":"+91 98765 43210",
   "emergencyContactName":"Someone","emergencyContactPhone":"+91 91234 56789",
-  "consentAccepted":true,"consentVersion":"2026-10-v1"}'
+  "consentAccepted":true,"consentVersion":"2026-10-v2"}'
 ```
 
 ### Sessions and hours (Phase 2)

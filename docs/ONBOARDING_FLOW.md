@@ -53,8 +53,8 @@ The login page has three links: **Login**, **Register as employee**, **Forgot pa
 |---|---|---|
 | 1 | Enter code | Case-insensitive, dashes optional. Any failure shows: "This code is invalid or has expired. Ask the owner for a new one." |
 | 2 | Details | Name 2-80 chars. Email valid and unique (case-insensitive). Password at least 10 characters, entered twice, not a common password. Job role from the list (locked if the owner preset it). Phone optional. There is NO editable device-mode field. A read-only line shows "Device type: Company MacBook (set by the owner)" or "Personal laptop", with a confirm tick ("This is the MacBook Leaders Key gave me" or "This is my own laptop"). The confirm is only a statement; the server uses the owner's value, and a mismatch (for example a Windows agent on a company-MacBook account) raises an alert to the owner. |
-| 3 | Consent | Plain-language text: what is tracked (work hours, activity, camera checks), that images are never stored, who sees the data. Must be accepted. Version and time are recorded. |
-| 4 | Face scan | Guided: look straight, slightly left, slightly right (about 5 frames). Quality checks: exactly one face, large enough, bright enough, sharp. Visible camera indicator. Frames are discarded immediately; only the averaged template is sent. Clear messages for permission denied or no camera. |
+| 3 | Consent | Plain-language text: what is tracked (work hours, activity, camera checks), that one profile photo is stored (encrypted, owner-only, deleted on leaving) and no other images or video ever are, who sees the data. Must be accepted. Version and time are recorded. |
+| 4 | Face scan | Guided: look straight, slightly left, slightly right (about 5 frames). Quality checks: exactly one face, large enough, bright enough, sharp. Visible camera indicator. Frames are discarded immediately; only the averaged template is sent, plus ONE profile photo that the employee sees and confirms first (retake allowed). Clear messages for permission denied or no camera. |
 | 5 | Done | "You are registered." Shows download links for the desktop agent (matching the device mode the owner chose) and a Log in button. |
 
 ## 3. Code states
@@ -70,7 +70,7 @@ A code can be used exactly once. Purposes: `INVITE`, (R) `PASSWORD_RESET`, (R) `
 5. The server decides device mode and anything owner-only. The register payload is validated with a strict Zod schema that rejects unknown fields.
 6. HTTPS only (also needed for browser camera access).
 7. Audit log entries for: code created, revoked, claimed, used, registration completed, claim failures (aggregated), duplicate-face rejection.
-8. Face data: no images, ever. Template encrypted at rest. Duplicate-face check (R) so one person cannot hold two accounts.
+8. Face data: no images except the one confirmed profile photo (encrypted at rest, owner-only, deleted on deactivation). Template encrypted at rest. Duplicate-face check (R) so one person cannot hold two accounts.
 
 ## 5. Password reset and face re-scan (R, no email server)
 - **Forgot password:** employee tells the owner, owner issues a PASSWORD_RESET code for that employee, employee enters email + code + new password on the login page. Same 10-minute rules.

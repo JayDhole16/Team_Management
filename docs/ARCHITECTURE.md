@@ -38,7 +38,7 @@ scripts/   (llm-eval.ts, mac-unblock.sh, backup.sh)
 ```
 
 ## 4. Data model (Prisma, simplified)
-- **users**: id, email (unique, case-insensitive), name, phone?, password_hash, role (OWNER|EMPLOYEE), status (ACTIVE|DEACTIVATED), job_role_id?, device_mode (COMPANY_MACBOOK|PERSONAL; owner-only field), idle_interval_min (default 20), face_template (encrypted bytes, nullable), face_model_version?, face_enrolled_at?, created_at, deactivated_at?
+- **users**: id, email (unique, case-insensitive), name, phone?, password_hash, role (OWNER|EMPLOYEE), status (ACTIVE|DEACTIVATED), job_role_id?, device_mode (COMPANY_MACBOOK|PERSONAL; owner-only field), idle_interval_min (default 20), face_template (encrypted bytes, nullable), face_model_version?, face_enrolled_at?, profile_photo (encrypted JPEG bytes, nullable; PRD Q13), profile_photo_at?, created_at, deactivated_at?
 - **job_roles**: id, key, label
 - **devices**: id, user_id, os, hostname, agent_version, mode, last_seen_at
 - **projects**: id, title, brief_original, summary_technical, created_by, created_at
@@ -75,10 +75,11 @@ else ok
 Full flow and screens: docs/ONBOARDING_FLOW.md.
 - Owner generates an INVITE access code (device mode set by owner). Employee claims it on the web registration page; the server returns a registration token (30 min). Nothing is created until `POST /register/complete`, which runs in one transaction: validate token and fields, duplicate-face check, create user, store encrypted face template, record consent, mark the code USED, write audit_log, emit `employee:registered`.
 - The face scan runs in the employee's browser using `packages/face`: several guided frames, quality checks (one face, size, brightness, sharpness), descriptors computed locally, frames discarded immediately. Only the averaged template and `face_model_version` are uploaded. Server encrypts it with AES-256-GCM (key from env).
+- Profile photo (PRD Q13, the ONE stored image): one frame from the scan is shown to the employee, who confirms it before upload. Downscaled on the device to a small JPEG (at most 512x512, under 200 KB). The server checks the type and size, encrypts it with AES-256-GCM (user id as associated data) and stores it in the database, never as a file on disk. Served only via the owner-only `GET /employees/:id/photo`, never logged. A re-scan replaces it; deactivation deletes it.
 - (R) Duplicate-face check: the new template is compared with all active employees' templates; a match rejects the registration with a generic message and raises a `security:alert` for the owner.
 - The agent downloads the employee's own template after login and matches locally. The threshold is tuned in Phase 9 on real cameras.
 - Re-scan (changed appearance, new camera, library upgrade): owner issues a FACE_RESCAN code; employee enters it in the web app or agent and scans again.
-- Known limitation: a printed photo can fool basic matching. A blink/head-turn liveness challenge is a possible later upgrade and is NOT in scope now. Since no photo is stored, the owner cannot visually verify who enrolled; the live code hand-over is the control (see PRD open question 13).
+- Known limitation: a printed photo can fool basic matching. A blink/head-turn liveness challenge is a possible later upgrade and is NOT in scope now. The stored profile photo lets the owner visually check who enrolled (PRD Q13); the live code hand-over remains the main control.
 
 ## 7. LLM pipelines
 Ollama call: POST {OLLAMA_BASE_URL}/api/chat with `stream: false`, `format: <JSON schema>`, `options.temperature: 0.2`.
@@ -108,7 +109,7 @@ Unknown `roleKey` -> null with `needsReview: true` set by the service.
 - register (public, rate-limited): POST claim { code } -> registration token; GET consent; POST complete { token, name, email, password, jobRoleId, phone?, consentVersion, faceTemplate }
 - codes (owner): POST invite { deviceMode, presetJobRoleId?, note? }, POST password-reset/:userId, POST face-rescan/:userId, GET (list), DELETE :id (revoke)
 - me: POST face-template { code, template } (re-scan with an owner-issued code)
-- employees (owner): list, get, PATCH (job role, device mode, idle interval), POST :id/deactivate, POST :id/reactivate. No direct create: employees come from registration.
+- employees (owner): list, get, GET :id/photo (profile photo), PATCH (job role, device mode, idle interval), POST :id/deactivate, POST :id/reactivate. No direct create: employees come from registration.
 - job-roles: GET, POST (owner)
 - ai: POST breakdown, translate-task, translate-update; GET health
 - projects / tasks: create, list, assign, update status; GET mine (employee); GET by-employee (owner)
@@ -138,7 +139,7 @@ Unknown `roleKey` -> null with `needsReview: true` set by the service.
 - RBAC middleware on every route; tests prove employee access is limited to own data.
 - Helmet, strict CORS, Zod validation, rate limits on login and /ai/*.
 - LLM output rendered as text only; model has no tools.
-- No images stored anywhere. Face templates encrypted at rest. Consent screen on agent first run.
+- No images stored anywhere except one profile photo per employee (encrypted, owner-only, deleted on deactivation). Face templates encrypted at rest. Consent screen on agent first run.
 - Access codes: generated with crypto.randomBytes, 8 characters from an unambiguous alphabet (no 0/O/1/I/L), shown grouped (XXXX-XXXX), compared case-insensitively ignoring dashes. Stored only as a keyed hash. Single use. Failed claims are rate-limited (5 per IP per 15 min, plus a global cap that raises a `security:alert`). Every failure returns the same generic message.
 - Device mode and job-role changes are owner-only and written to audit_log.
 - Web Push uses VAPID keys from env (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT); subscriptions belong to the owner account only.
