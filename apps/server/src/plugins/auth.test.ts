@@ -104,14 +104,28 @@ describe('RBAC on every route', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('the owner cannot use employee-only routes', async () => {
+  it('the owner gets 403 on EVERY employee-only route', async () => {
     const owner = await h.ownerToken();
-    const res = await h.app.inject({
-      method: 'POST',
-      url: '/api/v1/me/face-template',
-      headers: bearer(owner),
-      payload: {},
-    });
-    expect(res.statusCode).toBe(403);
+    const employeeOnly = h.app.routeAuthTable.filter(
+      (r) => r.auth !== 'public' && !r.auth.includes('OWNER'),
+    );
+    expect(employeeOnly.map((r) => `${r.method} ${r.url}`)).toEqual(
+      expect.arrayContaining([
+        'POST /api/v1/me/face-template',
+        'POST /api/v1/sessions/start',
+        'POST /api/v1/sessions/stop',
+        'GET /api/v1/sessions/current',
+        'POST /api/v1/agent/heartbeat',
+      ]),
+    );
+    for (const route of employeeOnly) {
+      const res = await h.app.inject({
+        method: route.method as HTTPMethods,
+        url: concreteUrl(route.url),
+        headers: bearer(owner),
+        payload: route.method === 'GET' || route.method === 'HEAD' ? undefined : {},
+      });
+      expect(res.statusCode, `${route.method} ${route.url}`).toBe(403);
+    }
   });
 });

@@ -6,6 +6,7 @@ import { AppError, rateLimited } from '../lib/errors';
 import { burnPasswordCheck, verifyPassword } from '../lib/passwords';
 import type { ServiceContext } from './context';
 import { toMe } from './mappers';
+import { closeOpenSession } from './session.service';
 
 export interface IssuedSession {
   accessToken: string;
@@ -121,5 +122,11 @@ export async function logout(ctx: ServiceContext, refreshToken: string | undefin
   const stored = await ctx.data.repos.refreshTokens.findByHash(
     keyedHash(ctx.env.REFRESH_TOKEN_SECRET, refreshToken),
   );
-  if (stored) await ctx.data.repos.refreshTokens.revoke(stored.id, ctx.clock());
+  if (!stored) return;
+  const now = ctx.clock();
+  // Only a still-valid login ends the work session (an old cookie just gets cleared).
+  const revoked = await ctx.data.repos.refreshTokens.revoke(stored.id, now);
+  if (revoked === 1 && stored.expiresAt > now) {
+    await ctx.data.transaction((repos) => closeOpenSession(repos, stored.userId, now, 'LOGOUT'));
+  }
 }

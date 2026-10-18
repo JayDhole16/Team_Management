@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../lib/errors';
 import type { Repos } from '../repositories';
 import type { ServiceContext } from './context';
 import { toEmployee } from './mappers';
+import { closeOpenSession } from './session.service';
 
 async function findEmployee(repos: Repos, id: string) {
   const user = await repos.users.findById(id);
@@ -75,9 +76,10 @@ export async function updateEmployee(
 }
 
 /**
- * Offboarding: blocks login, ends every session (refresh tokens; access tokens are
- * rejected because the auth check reads the user status), revokes open codes for this
- * employee and deletes the face template. Task and hours history is kept.
+ * Offboarding: blocks login, ends every login session (refresh tokens; access tokens are
+ * rejected because the auth check reads the user status), closes the open work session,
+ * revokes open codes for this employee and deletes the face template. Task and hours
+ * history is kept.
  */
 export async function deactivateEmployee(
   ctx: ServiceContext,
@@ -96,13 +98,17 @@ export async function deactivateEmployee(
       faceEnrolledAt: null,
     });
     await repos.refreshTokens.revokeAllForUser(id, now);
+    const closedSession = await closeOpenSession(repos, id, now, 'DEACTIVATED');
     await repos.accessCodes.revokeOpenForUser(id);
     await repos.audit.record({
       actorUserId: ownerId,
       action: 'employee.deactivated',
       entity: 'user',
       entityId: id,
-      meta: { faceTemplateDeleted: before.faceTemplate !== null },
+      meta: {
+        faceTemplateDeleted: before.faceTemplate !== null,
+        workSessionClosed: closedSession !== null,
+      },
       at: now,
     });
     return toEmployee(updated);

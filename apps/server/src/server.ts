@@ -2,6 +2,7 @@ import { buildApp } from './app';
 import { loadEnv } from './config/env';
 import { loggerOptions } from './config/logger';
 import { startExpireCodesJob } from './jobs/expire-codes';
+import { startSessionJobs } from './jobs/sessions';
 import { createDataAccess } from './repositories';
 import { createHealthRepository } from './repositories/health.repository';
 import { createPrismaClient } from './repositories/prisma';
@@ -20,10 +21,12 @@ bus.on('employee:registered', (e) => app.log.info({ userId: e.userId }, 'employe
 bus.on('security:alert', (e) => app.log.warn({ kind: e.kind }, `security alert: ${e.message}`));
 
 const stopExpireJob = startExpireCodesJob(app.serviceContext, app.log);
+const stopSessionJobs = startSessionJobs(app.serviceContext, app.log);
 
 async function shutdown(signal: string) {
   app.log.info(`${signal} received, shutting down`);
   stopExpireJob();
+  stopSessionJobs();
   await app.close();
   await prisma.$disconnect();
   process.exit(0);

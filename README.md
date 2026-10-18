@@ -24,7 +24,7 @@ After pulling a change that adds new keys to `.env.example`, run `pnpm env:setup
 
 `pnpm test` needs the Docker database running (`docker compose up -d db`). Server tests use a separate database `<POSTGRES_DB>_test` on the same server, created and migrated automatically. Your dev data is never touched.
 
-## Trying the API with curl (Phase 1)
+## Trying the API with curl (Phases 1-2)
 
 There is no UI for this yet (Phase 3). In Git Bash, from the repo root:
 
@@ -51,6 +51,27 @@ curl -s -X POST $API/register/complete -H 'content-type: application/json' -d '{
   "emergencyContactName":"Someone","emergencyContactPhone":"+91 91234 56789",
   "consentAccepted":true,"consentVersion":"2026-10-v1"}'
 ```
+
+### Sessions and hours (Phase 2)
+
+```bash
+# Employee login (access tokens last 15 minutes; log in again if you get 401)
+EMP=$(curl -s -X POST $API/auth/login -H 'content-type: application/json' \
+  -d '{"email":"test.employee@example.com","password":"Mango-River-Lamp-73"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).data.accessToken')
+# Start (calling it twice returns the same session), current, stop (break), start again (resume)
+curl -s -X POST $API/sessions/start -H "authorization: Bearer $EMP"
+curl -s $API/sessions/current -H "authorization: Bearer $EMP"
+curl -s -X POST $API/sessions/stop -H "authorization: Bearer $EMP"
+# Agent heartbeat (the desktop agent sends these every 30 s from Phase 8)
+curl -s -X POST $API/agent/heartbeat -H "authorization: Bearer $EMP" -H 'content-type: application/json' \
+  -d "{\"heartbeats\":[{\"at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"state\":\"ACTIVE\"}]}"
+# Hours: today + month for yourself; the owner must add ?userId=<employee id>
+curl -s $API/reports/hours/today -H "authorization: Bearer $EMP"
+curl -s "$API/reports/hours?month=2026-10" -H "authorization: Bearer $EMP"
+curl -s "$API/reports/hours?userId=<employee id>&month=2026-10" -H "authorization: Bearer $OWNER"
+```
+
+Once a session has had a heartbeat, it closes itself 3 minutes (`SESSION_AUTOCLOSE_AFTER_SEC`) after the last one. A session with no heartbeat at all closes after 12 hours (`SESSION_NO_HEARTBEAT_MAX_HOURS`), and the report flags that day.
 
 ## Commands
 

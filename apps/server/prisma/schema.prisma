@@ -2,8 +2,9 @@
 // The connection URL lives in prisma.config.ts (Prisma 7).
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -29,6 +30,21 @@ enum CodePurpose {
   INVITE
   PASSWORD_RESET
   FACE_RESCAN
+}
+
+enum SessionEndReason {
+  MANUAL_STOP
+  AUTO_CLOSED
+  LOGOUT
+  DEACTIVATED
+  /// A session that never got an agent heartbeat, closed after SESSION_NO_HEARTBEAT_MAX_HOURS.
+  MAX_DURATION
+}
+
+enum HeartbeatState {
+  ACTIVE
+  IDLE
+  AWAY
 }
 
 enum CodeStatus {
@@ -72,6 +88,8 @@ model User {
   codesTargeted   AccessCode[]    @relation("CodeTarget")
   codesRegistered AccessCode[]    @relation("CodeRegistered")
   auditEntries    AuditLog[]
+  workSessions    WorkSession[]
+  heartbeats      Heartbeat[]
 
   @@index([role, status])
   @@map("users")
@@ -98,7 +116,8 @@ model Device {
   lastSeenAt   DateTime?  @map("last_seen_at")
   createdAt    DateTime   @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  workSessions WorkSession[]
 
   @@index([userId])
   @@map("devices")
@@ -177,4 +196,59 @@ model AuditLog {
   @@index([at])
   @@index([entity, entityId])
   @@map("audit_log")
+}
+
+model WorkSession {
+  id              String            @id @default(uuid()) @db.Uuid
+  userId          String            @map("user_id") @db.Uuid
+  deviceId        String?           @map("device_id") @db.Uuid
+  startedAt       DateTime          @map("started_at")
+  endedAt         DateTime?         @map("ended_at")
+  endReason       SessionEndReason? @map("end_reason")
+  /// Newest heartbeat attached to this session (denormalised for the auto-close job).
+  lastHeartbeatAt DateTime?         @map("last_heartbeat_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  user       User             @relation(fields: [userId], references: [id])
+  device     Device?          @relation(fields: [deviceId], references: [id])
+  heartbeats Heartbeat[]
+  gaps       WorkSessionGap[]
+
+  /// At most one open session per user, enforced by the database.
+  @@unique([userId], map: "work_sessions_one_open_per_user", where: raw("ended_at IS NULL"))
+  @@index([userId, startedAt])
+  @@index([endedAt, lastHeartbeatAt])
+  @@map("work_sessions")
+}
+
+/// Agent heartbeat. Kept 90 days.
+model Heartbeat {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  sessionId  String         @map("session_id") @db.Uuid
+  /// Client time (may be back-dated up to 12 h when the agent replays its offline queue).
+  at         DateTime
+  state      HeartbeatState
+  receivedAt DateTime       @map("received_at")
+
+  user    User        @relation(fields: [userId], references: [id])
+  session WorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, at])
+  @@index([at])
+  @@map("heartbeats")
+}
+
+/// A stretch of a session known only from replayed (back-dated) heartbeats. Flagged in reports.
+model WorkSessionGap {
+  id        String   @id @default(uuid()) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  fromAt    DateTime @map("from_at")
+  toAt      DateTime @map("to_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session WorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("work_session_gaps")
 }

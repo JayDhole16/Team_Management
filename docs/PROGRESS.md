@@ -6,7 +6,7 @@ Update this at the end of every phase (the `/phase` command does it).
 |---|---|---|---|---|
 | 0 | Bootstrap monorepo | done | 2026-10-18 | pnpm monorepo, Postgres 16 in Docker, Prisma empty migration, /api/v1/health + status page. See "Phase 0" below. |
 | 1 | Auth, invite codes, registration API | done | 2026-10-18 | Login/refresh/RBAC, access codes, atomic registration, employee admin, recovery codes. See "Phase 1" below. |
-| 2 | Work sessions and hours | todo | | |
+| 2 | Work sessions and hours | done | 2026-10-18 | Sessions (idempotent start, DB-enforced one open per user), heartbeats with offline replay, auto-close job, IST hours service, hours reports. See "Phase 2" below. |
 | 3 | Web shell, invite UI, registration wizard, timer | todo | | |
 | 4 | LLM service | todo | | |
 | 5 | Projects and tasks | todo | | |
@@ -66,6 +66,49 @@ Update this at the end of every phase (the `/phase` command does it).
 - `pnpm test` now needs the Docker DB running (decided 2026-10-18).
 - New dependencies: `argon2`, `jose`, `@fastify/cookie` (server).
 
+## Phase 2 — Work sessions and hours (done 2026-10-18)
+**Built**
+- Migration `20261018141724_work_sessions_heartbeats`: `work_sessions` (with `last_heartbeat_at`), `heartbeats` (with `received_at`), `work_session_gaps`. One open session per user is enforced by a partial unique index (`work_sessions_one_open_per_user ... WHERE ended_at IS NULL`, Prisma `partialIndexes` preview feature; `prisma migrate diff` shows no drift).
+- `services/hours.ts`: the only place hours are calculated. Pure functions for IST day/month ranges (fixed +05:30), worked time clipped to day/month boundaries, idle time (an IDLE/AWAY heartbeat covers until the next heartbeat, capped at the auto-close threshold and the session end), per-day breakdown with flags, month totals (the total is the sum of the day values), today totals. An open session counts up to "now". Idle time is never deducted (PRD Q1).
+- `services/heartbeat-merge.ts`: pure function that places each heartbeat:
+  - Inside a session: attached.
+  - After an AUTO_CLOSED session, with no silence longer than the threshold: the session is reopened if it is the latest one, otherwise extended. The covered stretch is stored as a gap.
+  - More than 12 h old, or more than 60 s in the future: ignored. Smaller clock skew is clamped to "now".
+  - Sessions ended by stop, logout, deactivation or the no-agent cap are never reopened.
+- Sessions API (EMPLOYEE only; the owner gets 403):
+  - `POST /sessions/start`: idempotent. A per-user advisory lock serialises it, and the unique index is the backstop.
+  - `POST /sessions/stop`: returns null when nothing is open.
+  - `GET /sessions/current`: includes `serverTime` for the timer.
+  - `POST /agent/heartbeat`: batch of 1-1500, returns `{accepted, ignored, session}`.
+- Reports: `GET /reports/hours?userId&month` (total, idle, work days, per-day breakdown with `OFFLINE_GAP` / `MAX_DURATION_CLOSE` flags, sessions with gaps) and `GET /reports/hours/today?userId` (today and month totals, open session). Access rules:
+  - Owner: may read any employee; `userId` is required (400 without it, 404 if it is not an employee).
+  - Employee: may read only their own hours (403 for another id).
+- Job `jobs/sessions.ts` (every 30 s):
+  - A session whose agent is silent for `SESSION_AUTOCLOSE_AFTER_SEC` (180) is closed at its last heartbeat. The update is guarded, so a newer heartbeat wins.
+  - A session that never got a heartbeat is closed `SESSION_NO_HEARTBEAT_MAX_HOURS` (12) after it started, with reason MAX_DURATION.
+  - Hourly: deletes heartbeats older than 90 days.
+- Deactivation now closes the open session (DEACTIVATED). Logout with a valid refresh token closes it (LOGOUT).
+- Shared: `schemas/sessions.ts`, `schemas/reports.ts`. New env keys in `.env.example` (added to the local `.env` with `pnpm env:setup --add-missing`).
+- Tests: 169 server in 19 files, 26 shared, 5 web, 1 agent.
+  - hours unit (15): midnight split, UTC→IST day, month boundary, open session, overnight open session, idle caps and midnight split, flags.
+  - merge unit (12).
+  - sessions integration (14): duplicate and parallel start, the DB refuses a 2nd open session, stop/resume, owner 403, heartbeats, auto-close at the threshold, the guarded close, the 12 h cap, offline replay reopen with gap and report flag, no reopen after stop, deactivation, logout.
+  - reports integration (5).
+  - RBAC: the owner gets 403 on every employee-only route.
+
+**Deviations from the plan**
+- New beyond ARCHITECTURE §4:
+  - end reasons `DEACTIVATED` and `MAX_DURATION`
+  - columns `work_sessions.last_heartbeat_at` and `heartbeats.received_at`
+  - table `work_session_gaps`
+- Decided with the user (2026-10-18): a session that never got an agent heartbeat (web-only, Phases 3-7) stays open until Stop/Logout but is closed after 12 h and flagged.
+- The server does not start a session on login. E-1 is done by the client calling `POST /sessions/start` right after login (web in Phase 3, agent in Phase 8).
+- The heartbeat uses the normal access token until device tokens arrive (Phase 8). It does not record `device_id` yet.
+- Per-day breakdown lists only days with logged time; the UI fills empty days.
+- Heartbeats older than 90 days are deleted, so idle time for months older than ~90 days reads as 0 (worked time is kept).
+- Prisma's generated types list `userId` as a unique key of WorkSession because of the partial index. The code never uses `findUnique` by userId (`findOpen` uses `findFirst`).
+- If the server is down past the 3 min / 12 h limits, a session stays open until the job runs at the next start (it runs immediately on boot); a Stop in that window ends it at the Stop time.
+
 ## Decisions
 (Record decisions made with the client, e.g. answers to PRD open questions.)
 Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The ones that affect the build:
@@ -99,4 +142,7 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [ ] Phase 1: by hand with curl (README "Trying the API with curl"): a wrong code, an expired code (wait 10 min), a revoked code and a reused code all return the same "This code is invalid or has expired" message; complete a registration and log in as that employee; `GET /api/v1/employees` with the employee token returns 403.
 - [ ] Phase 1: decide PRD Q13 (profile photo) vs CLAUDE.md rule 1 before Phase 9.
 - [ ] Phase 1: send the client the draft consent text (`packages/shared/src/schemas/consent.ts`) for approval (PRD Q6).
+- [ ] Phase 2: with `pnpm dev` running, use the README "Sessions and hours" curl commands as a registered employee: start twice (same id), stop, start again (new id), then `reports/hours/today`, and check that the totals match the time on your watch.
+- [ ] Phase 2: leave a session open past midnight IST (start around 23:50, check after 00:10). `reports/hours?month=...` must show the time split between the two dates, and `reports/hours/today` must count only the time after midnight.
+- [ ] Phase 2: as the owner, `reports/hours?userId=<employee id>` works; with the employee token and another employee's id you get 403.
 - [ ] Phase 11: behind Cloudflare Tunnel, set `TRUST_PROXY=true` and use the real client IP (CF-Connecting-IP); otherwise every request looks like one IP and the per-IP limits act globally.

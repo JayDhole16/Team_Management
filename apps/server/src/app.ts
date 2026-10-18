@@ -15,6 +15,8 @@ import { registerHealthRoutes } from './routes/health';
 import { registerJobRoleRoutes } from './routes/job-roles';
 import { registerMeRoutes } from './routes/me';
 import { registerRegisterRoutes } from './routes/register';
+import { registerReportRoutes } from './routes/reports';
+import { registerSessionRoutes } from './routes/sessions';
 import { createLimiters, type Limiters, type ServiceContext } from './services/context';
 
 declare module 'fastify' {
@@ -101,6 +103,8 @@ export function buildApp(deps: AppDeps, options: { logger?: FastifyServerOptions
   registerEmployeeRoutes(app, ctx);
   registerJobRoleRoutes(app, ctx);
   registerMeRoutes(app, ctx);
+  registerSessionRoutes(app, ctx);
+  registerReportRoutes(app, ctx);
 
   return app;
 }

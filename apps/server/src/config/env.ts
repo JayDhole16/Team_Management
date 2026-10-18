@@ -26,6 +26,10 @@ const EnvSchema = z.object({
   REGISTRATION_WINDOW_MIN: z.coerce.number().int().min(5).max(120).default(30),
   FACE_ENROLLMENT_REQUIRED: booleanFlag.default(false),
   CLAIM_GLOBAL_FAILURE_CAP: z.coerce.number().int().min(10).default(50),
+  /** A session whose agent goes silent this long is closed at its last heartbeat (PRD: 3 min). */
+  SESSION_AUTOCLOSE_AFTER_SEC: z.coerce.number().int().min(60).max(3600).default(180),
+  /** A session that never got an agent heartbeat is closed this many hours after it started. */
+  SESSION_NO_HEARTBEAT_MAX_HOURS: z.coerce.number().int().min(1).max(24).default(12),
   /** Set to true only behind a trusted reverse proxy / tunnel (Phase 11). */
   TRUST_PROXY: booleanFlag.default(false),
 });

@@ -20,6 +20,8 @@ describe('parseEnv', () => {
       FACE_ENROLLMENT_REQUIRED: false,
       ACCESS_TOKEN_TTL_MIN: 15,
       TRUST_PROXY: false,
+      SESSION_AUTOCLOSE_AFTER_SEC: 180,
+      SESSION_NO_HEARTBEAT_MAX_HOURS: 12,
     });
   });
 

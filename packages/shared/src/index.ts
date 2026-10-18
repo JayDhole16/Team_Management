@@ -7,4 +7,6 @@ export * from './schemas/employees';
 export * from './schemas/health';
 export * from './schemas/password';
 export * from './schemas/register';
+export * from './schemas/reports';
+export * from './schemas/sessions';
 export type * from './types';

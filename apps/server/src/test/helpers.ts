@@ -35,7 +35,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
 
 export async function resetDb(): Promise<void> {
   await testPrisma().$executeRawUnsafe(
-    'TRUNCATE users, job_roles, devices, access_codes, refresh_tokens, consent_records, audit_log CASCADE',
+    'TRUNCATE users, job_roles, devices, access_codes, refresh_tokens, consent_records, audit_log, work_sessions, heartbeats, work_session_gaps CASCADE',
   );
 }
 

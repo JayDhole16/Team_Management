@@ -3,8 +3,11 @@ import { createAccessCodeRepository } from './access-code.repository';
 import { createAuditRepository } from './audit.repository';
 import { createConsentRepository } from './consent.repository';
 import { createJobRoleRepository } from './job-role.repository';
+import { createHeartbeatRepository } from './heartbeat.repository';
 import { createRefreshTokenRepository } from './refresh-token.repository';
+import { createSessionGapRepository } from './session-gap.repository';
 import { createUserRepository } from './user.repository';
+import { createWorkSessionRepository } from './work-session.repository';
 
 /** A Prisma client or the client of an open transaction. */
 export type Db = PrismaClient | Prisma.TransactionClient;
@@ -17,6 +20,9 @@ export function createRepos(db: Db) {
     refreshTokens: createRefreshTokenRepository(db),
     consent: createConsentRepository(db),
     audit: createAuditRepository(db),
+    sessions: createWorkSessionRepository(db),
+    heartbeats: createHeartbeatRepository(db),
+    sessionGaps: createSessionGapRepository(db),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;

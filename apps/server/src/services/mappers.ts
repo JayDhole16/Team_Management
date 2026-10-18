@@ -1,5 +1,5 @@
-import type { CodeListItem, CodeStatus, Employee, Me } from '@lk/shared';
-import type { AccessCode, User } from '../generated/prisma/client';
+import type { CodeListItem, CodeStatus, Employee, Me, WorkSession } from '@lk/shared';
+import type { AccessCode, User, WorkSession as WorkSessionRow } from '../generated/prisma/client';
 import { dbDateToString } from '../lib/clock';
 
 // Explicit field lists: password hashes, code hashes and face templates can never leak
@@ -61,5 +61,15 @@ export function toCodeListItem(code: AccessCode, now: Date): CodeListItem {
     expiresAt: code.expiresAt.toISOString(),
     claimExpiresAt: code.claimExpiresAt?.toISOString() ?? null,
     createdAt: code.createdAt.toISOString(),
+  };
+}
+
+export function toWorkSession(session: WorkSessionRow): WorkSession {
+  return {
+    id: session.id,
+    startedAt: session.startedAt.toISOString(),
+    endedAt: session.endedAt?.toISOString() ?? null,
+    endReason: session.endReason,
+    lastHeartbeatAt: session.lastHeartbeatAt?.toISOString() ?? null,
   };
 }
