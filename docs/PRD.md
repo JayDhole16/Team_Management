@@ -71,12 +71,12 @@ Hardware, paid licences (MDM, VPN, hosting), mobile apps, screenshot/screen-reco
 5. Who administers the MacBooks; will there be an MDM? Without MDM, blocking is best-effort with tamper reporting. (Phase 10) Without MDM
 6. Wording of the employee consent for activity tracking and face verification. (Phase 8) Yes we will sign the consent form from employee
 7. What counts as "background activity" for editors/designers (renders, exports)? (Phase 9) Yes Renders and Exports and something related to their work consider as Background activity
-8. Plain-language output: Hinglish (Roman script) or English? Default: English.
+8. Plain-language output: Hinglish (Roman script) or English? English.
 9. Work days/hours and holidays: any expected-hours target to show? no just show work days/hours and holidays don't show target hours
 10. Domain name or tunnel choice (Tailscale / Cloudflare Tunnel) for remote access.Cloudflare Tunnel
 11. Registration window: the code must be entered within 10 minutes; once accepted, how long does the employee get to finish (default 30 min)? yes 30mins (Phase 1)
 12. Should the owner approve each new employee after registration, or is the owner-issued code enough? Default: no extra approval, owner is notified. (Phase 1) no just code is enough, just show notification on admin dashboard that new employee is added and show that employee details
-13. Store one profile photo at enrollment so the owner can visually verify identity?yes store profile photo. (Phase 9)
+13. Store one profile photo at enrollment so the owner can visually verify identity?yes just store 1 profile photo. (Phase 9)
 14. Should the owner be able to pre-select and lock the job role in the invite, or can employees always choose? Default: employee chooses unless owner pre-selected. (Phase 3)
 15. Extra profile fields wanted: phone, joining date, emergency contact? yes . (Phase 3)
 16. Confirm the (R) items are in scope: password-reset/re-scan codes, duplicate-face check, audit log.yes do it (Phase 1, 9)

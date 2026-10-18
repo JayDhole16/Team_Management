@@ -35,7 +35,7 @@ Tags: [DECISION] ask the client · [SETUP] install or configure · [TEST] check 
 
 ## Phase 3 Web screens
 - [TEST] Click through as owner (generate a code) and as a new employee in a private window (register).
-- [LEGAL] Write the consent text (what is tracked, that no images are stored, who sees the data). Claude puts a placeholder; replace it before real use.
+- [LEGAL] Write the consent text (what is tracked, that no images are stored only one is stored while registeration for profile photo, who sees the data). Claude puts a placeholder; replace it before real use.
 - [DECISION] Show the pages in docs/SCREENS.md to the client and note changes.
 - [TEST] Open the owner pages on your phone (use the quick tunnel in docs/DEV_ENVIRONMENT.md) and check the layout at phone width.
 
