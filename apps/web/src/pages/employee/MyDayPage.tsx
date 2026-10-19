@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { Link } from 'react-router';
 import { fetchTodayHours } from '../../api/reports';
 import { startSession, stopSession } from '../../api/sessions';
 import { useAuth, useUser } from '../../auth/AuthProvider';
@@ -8,7 +9,10 @@ import { Stat } from '../../components/HoursViews';
 import { Badge, Button, Card, ErrorBox, Notice, Spinner } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
 import { formatClock, formatHours, istDate } from '../../lib/time';
+import { nextTask } from '../../lib/tasks';
 import { agentRunning, liveTotals, serverNowFrom } from '../../lib/timer';
+import { PriorityBadge, TaskStatusBadge } from '../../components/TaskViews';
+import { useMyTasks } from './MyTasksPage';
 
 export const MY_TODAY_KEY = ['my-today'] as const;
 
@@ -125,6 +129,38 @@ export function MyDayPage() {
         <Stat label="Today" value={formatHours(totals.todaySec)} />
         <Stat label="This month" value={formatHours(totals.monthSec)} />
       </dl>
+      <NextTask />
     </div>
+  );
+}
+
+/** Shortcut to the task to work on next (docs/SCREENS.md, My Day). */
+function NextTask() {
+  const tasks = useMyTasks();
+  if (!tasks.data) return null;
+  const task = nextTask(tasks.data);
+  return (
+    <Card>
+      <h2 className="mb-2 font-semibold">Next task</h2>
+      {task ? (
+        <Link
+          to="/me/tasks"
+          className="block rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
+        >
+          <span className="block font-medium break-words text-gray-900">{task.title}</span>
+          <span className="mt-2 flex flex-wrap gap-1">
+            <TaskStatusBadge status={task.status} />
+            <PriorityBadge priority={task.priority} />
+          </span>
+        </Link>
+      ) : (
+        <p className="text-sm text-gray-600">
+          Nothing waiting.{' '}
+          <Link to="/me/tasks" className="text-blue-800 underline">
+            See all my tasks
+          </Link>
+        </p>
+      )}
+    </Card>
   );
 }

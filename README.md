@@ -23,6 +23,7 @@ Open http://localhost:5173 and log in with your OWNER_EMAIL / OWNER_PASSWORD. ht
 - **Owner:** Overview, Employees (role/status filter, hours today and this month, employee page with settings, reset and re-scan codes, deactivate) and Invites. "Add new employee" asks for the device type and shows a one-time code with a 10-minute countdown. The code is never shown again.
 - **New employee:** on the login page, "Register as employee": code, details, consent, face scan (a placeholder until Phase 9), done.
 - **Employee:** logging in starts the work session. My Day shows the timer with Stop session (break) and Resume, plus hours today and this month. My hours has the per-day list.
+- **Projects and tasks (Phase 5):** Projects -> New project: describe it in your own words, "Generate tasks with AI" (or "Write it by hand"), edit, Save, then Assign each task. Tasks is the board (filters by employee, role, project) with "Direct task". Employees see My tasks (Start, Mark blocked, Complete, Reopen) and a Next task shortcut on My Day.
 - **Phone:** below 768 px the menu becomes a bottom tab bar. To try it on a real phone, start the dev server with `LK_TUNNEL=1 pnpm dev` (Git Bash), run `cloudflared tunnel --url http://localhost:5173` and open the https address it prints. This is for testing only: the address changes every run, anyone with it can reach your dev server, so close the tunnel afterwards. Never set `TRUST_PROXY=true` for a quick tunnel.
 
 After pulling a change that adds new keys to `.env.example`, run `pnpm env:setup --add-missing`. It appends only the missing keys, generates random secrets for them and never prints values.
@@ -93,6 +94,22 @@ curl -s -X POST $API/ai/translate-task -H "authorization: Bearer $OWNER" -H 'con
 curl -s -X POST $API/ai/translate-update -H "authorization: Bearer $EMP" -H 'content-type: application/json'   -d '{"text":"Dockerized the API. Blocked on the SSL certificate from the client DNS."}'
 ```
 
+### Projects and tasks (Phase 5)
+
+Works with Ollama stopped: the owner sends the reviewed (or hand-written) text, the server never calls the AI here.
+
+```bash
+# Owner: add a missing job role (there is no screen for it yet)
+curl -s -X POST $API/job-roles -H "authorization: Bearer $OWNER" -H 'content-type: application/json' -d '{"key":"video_editor","label":"Video Editor"}'
+# Owner: save a project with unsent tasks (jobRoleId from GET $API/job-roles, or null)
+curl -s -X POST $API/projects -H "authorization: Bearer $OWNER" -H 'content-type: application/json'   -d '{"title":"Footer fixes","summaryTechnical":"Small fixes in the footer.","tasks":[{"title":"Fix footer links","descriptionTechnical":"Three links go to 404.","jobRoleId":null,"priority":"MEDIUM","source":"MANUAL"}]}'
+curl -s -X POST $API/tasks/<task id>/assign -H "authorization: Bearer $OWNER" -H 'content-type: application/json' -d '{"assigneeId":"<employee id>"}'
+curl -s "$API/tasks?status=PENDING" -H "authorization: Bearer $OWNER"   # board; also assigneeId, jobRoleId, projectId
+# Employee: own tasks, then Start / Mark blocked (reason required) / Complete
+curl -s $API/tasks/mine -H "authorization: Bearer $EMP"
+curl -s -X POST $API/tasks/<task id>/status -H "authorization: Bearer $EMP" -H 'content-type: application/json' -d '{"status":"BLOCKED","reason":"Waiting for the logo files"}'
+```
+
 ## Local LLM (Ollama)
 
 1. Install Ollama from ollama.com, then pull the model set in `OLLAMA_MODEL` (default `qwen3.5:4b`): `ollama pull qwen3.5:4b`.
@@ -130,7 +147,7 @@ scripts/        Ops scripts
 |---|---|
 | 4000 | API server (`GET /api/v1/health`) |
 | 5173 | Web app (Vite dev server; proxies `/api` to 4000) |
-| 4100 / 5174 | API / web started by `pnpm test:e2e` only |
+| 4100 / 4101 / 5174 | API / fake Ollama / web started by `pnpm test:e2e` only |
 | 5434 | PostgreSQL in Docker (bound to 127.0.0.1 only). Change `DB_PORT` and the port in `DATABASE_URL` in `.env` if it is taken |
 
 ## Troubleshooting

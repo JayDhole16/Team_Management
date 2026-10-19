@@ -1,15 +1,8 @@
 import { INVALID_CODE_MESSAGE } from '@lk/shared';
-import { expect, test, type Page } from '@playwright/test';
-import { E2E_OWNER, loginAs } from './fixtures';
+import { expect, test } from '@playwright/test';
+import { E2E_OWNER, expectNoSideScroll, loginAs } from './fixtures';
 
 // Runs only in the "phone" project (390 px wide, touch).
-
-async function expectNoSideScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-}
 
 test('public pages fit a phone screen', async ({ page }) => {
   for (const path of ['/login', '/register', '/forgot-password']) {
@@ -23,20 +16,31 @@ test('owner pages work at phone width with the bottom tab bar', async ({ page, b
   await loginAs(page, E2E_OWNER.email, E2E_OWNER.password, '/owner');
   const tabs = page.getByTestId('tab-bar');
   await expect(tabs).toBeVisible();
-  for (const name of ['Overview', 'Employees', 'Invites', 'More']) {
+  for (const name of ['Overview', 'Tasks', 'Employees', 'More']) {
     await expect(tabs.getByRole('link', { name })).toBeVisible();
   }
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();
 
   const headings: Record<string, RegExp> = {
+    Tasks: /^Tasks$/,
     Employees: /^Employees$/,
-    Invites: /^Invites and codes$/,
     More: /^More$/,
     Overview: /^Hello, /,
   };
   for (const [name, heading] of Object.entries(headings)) {
     await tabs.getByRole('link', { name }).click();
     // Measure the new page, not the old one or a spinner.
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+    await expectNoSideScroll(page);
+  }
+
+  // Projects and Invites are under More.
+  for (const [link, heading] of [
+    ['Projects', /^Projects$/],
+    ['Invites and codes', /^Invites and codes$/],
+  ] as const) {
+    await tabs.getByRole('link', { name: 'More' }).click();
+    await page.getByRole('main').getByRole('link', { name: link }).click();
     await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
     await expectNoSideScroll(page);
   }

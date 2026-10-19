@@ -36,7 +36,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
 
 export async function resetDb(): Promise<void> {
   await testPrisma().$executeRawUnsafe(
-    'TRUNCATE users, job_roles, devices, access_codes, refresh_tokens, consent_records, audit_log, work_sessions, heartbeats, work_session_gaps CASCADE',
+    'TRUNCATE users, job_roles, devices, access_codes, refresh_tokens, consent_records, audit_log, work_sessions, heartbeats, work_session_gaps, projects, tasks, task_status_events CASCADE',
   );
 }
 
@@ -76,9 +76,13 @@ export async function createHarness(options: HarnessOptions = {}) {
   const events = {
     registered: [] as AppEvents['employee:registered'][],
     alerts: [] as AppEvents['security:alert'][],
+    taskAssigned: [] as AppEvents['task:assigned'][],
+    taskStatus: [] as AppEvents['task:status-changed'][],
   };
   bus.on('employee:registered', (e) => events.registered.push(e));
   bus.on('security:alert', (e) => events.alerts.push(e));
+  bus.on('task:assigned', (e) => events.taskAssigned.push(e));
+  bus.on('task:status-changed', (e) => events.taskStatus.push(e));
   const logs: string[] = [];
   const llm = options.llm ?? mockLlm();
 

@@ -5,6 +5,8 @@ import type {
   DeviceMode,
   JobRole,
   SessionEndReason,
+  TaskPriority,
+  TaskStatus,
 } from '@lk/shared';
 import type { Tone } from '../components/ui';
 
@@ -45,3 +47,22 @@ export function roleLabel(roles: JobRole[] | undefined, id: string | null): stri
   if (!id) return 'No role';
   return roles?.find((r) => r.id === id)?.label ?? '…';
 }
+
+export const TASK_STATUS: Record<TaskStatus, { label: string; tone: Tone }> = {
+  PENDING: { label: 'Pending', tone: 'grey' },
+  IN_PROGRESS: { label: 'In progress', tone: 'blue' },
+  BLOCKED: { label: 'Blocked', tone: 'red' },
+  COMPLETED: { label: 'Completed', tone: 'green' },
+};
+
+export const PRIORITY: Record<TaskPriority, { label: string; tone: Tone }> = {
+  HIGH: { label: 'High priority', tone: 'red' },
+  MEDIUM: { label: 'Medium priority', tone: 'amber' },
+  LOW: { label: 'Low priority', tone: 'grey' },
+};
+
+export const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
+  { value: 'HIGH', label: 'High' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'LOW', label: 'Low' },
+];

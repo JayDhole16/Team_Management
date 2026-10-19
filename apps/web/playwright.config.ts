@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { E2E_API_PORT, E2E_OWNER, E2E_WEB_PORT } from './e2e/fixtures';
+import { E2E_API_PORT, E2E_FAKE_OLLAMA_PORT, E2E_OWNER, E2E_WEB_PORT } from './e2e/fixtures';
 
 /**
  * End-to-end tests. Starts its own API (port 4100) on a fresh `<db>_e2e` database and its own
@@ -46,6 +46,7 @@ export default defineConfig({
       url: `http://127.0.0.1:${E2E_API_PORT}/api/v1/health`,
       env: {
         E2E_API_PORT: String(E2E_API_PORT),
+        E2E_FAKE_OLLAMA_PORT: String(E2E_FAKE_OLLAMA_PORT),
         E2E_OWNER_EMAIL: E2E_OWNER.email,
         E2E_OWNER_PASSWORD: E2E_OWNER.password,
       },

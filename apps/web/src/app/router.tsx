@@ -7,6 +7,7 @@ import { EmployeeLayout } from '../layouts/EmployeeLayout';
 import { OwnerLayout } from '../layouts/OwnerLayout';
 import { MyDayPage } from '../pages/employee/MyDayPage';
 import { MyHoursPage } from '../pages/employee/MyHoursPage';
+import { MyTasksPage } from '../pages/employee/MyTasksPage';
 import { ProfilePage } from '../pages/employee/ProfilePage';
 import { HealthPage } from '../pages/HealthPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
@@ -15,6 +16,10 @@ import { EmployeesPage } from '../pages/owner/EmployeesPage';
 import { InvitesPage } from '../pages/owner/InvitesPage';
 import { MorePage } from '../pages/owner/MorePage';
 import { OverviewPage } from '../pages/owner/OverviewPage';
+import { NewProjectPage } from '../pages/owner/projects/NewProjectPage';
+import { ProjectDetailPage } from '../pages/owner/projects/ProjectDetailPage';
+import { ProjectsPage } from '../pages/owner/projects/ProjectsPage';
+import { TasksPage } from '../pages/owner/TasksPage';
 import { ForgotPasswordPage } from '../pages/public/ForgotPasswordPage';
 import { LoginPage } from '../pages/public/LoginPage';
 import { RegisterPage } from '../pages/register/RegisterPage';
@@ -48,6 +53,10 @@ export const router = createBrowserRouter([
           { path: 'employees', element: <EmployeesPage /> },
           { path: 'employees/:id', element: <EmployeeDetailPage /> },
           { path: 'invites', element: <InvitesPage /> },
+          { path: 'projects', element: <ProjectsPage /> },
+          { path: 'projects/new', element: <NewProjectPage /> },
+          { path: 'projects/:id', element: <ProjectDetailPage /> },
+          { path: 'tasks', element: <TasksPage /> },
           { path: 'more', element: <MorePage /> },
         ],
       },
@@ -61,6 +70,7 @@ export const router = createBrowserRouter([
         element: <EmployeeLayout />,
         children: [
           { index: true, element: <MyDayPage /> },
+          { path: 'tasks', element: <MyTasksPage /> },
           { path: 'hours', element: <MyHoursPage /> },
           { path: 'profile', element: <ProfilePage /> },
         ],

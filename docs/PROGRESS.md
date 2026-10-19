@@ -9,7 +9,7 @@ Update this at the end of every phase (the `/phase` command does it).
 | 2 | Work sessions and hours | done | 2026-10-18 | Sessions (idempotent start, DB-enforced one open per user), heartbeats with offline replay, auto-close job, IST hours service, hours reports. See "Phase 2" below. |
 | 3 | Web shell, invite UI, registration wizard, timer | done | 2026-10-19 | Login, role-guarded owner/employee layouts, invite code UI, 5-step registration wizard, forgot password, employee timer; Playwright on desktop and 390 px. See "Phase 3" below. |
 | 4 | LLM service | done | 2026-10-19 | Ollama client, P1/P2/P3 pipelines with one retry, /ai endpoints (503 when Ollama is down), eval script; qwen3.5:4b passes 24/24 at 100% GPU. See "Phase 4" below. |
-| 5 | Projects and tasks | todo | | |
+| 5 | Projects and tasks | done | 2026-10-20 | Projects (AI breakdown or by hand), assign/reassign, direct tasks, owner board, employee My tasks; Playwright on desktop and phone with a fake Ollama. See "Phase 5" below. |
 | 6 | Progress updates | todo | | |
 | 7 | Realtime status and alerts | todo | | |
 | 8 | Desktop agent core | todo | | |
@@ -237,6 +237,71 @@ Update this at the end of every phase (the `/phase` command does it).
 - New env keys `OLLAMA_TIMEOUT_MS` and `PLAIN_LANGUAGE`; the defaults apply until you add them (`pnpm env:setup --add-missing`).
 - No new dependencies; no web changes (the UI comes in Phase 5).
 
+## Phase 5 — Projects and tasks (done 2026-10-20)
+**Built**
+- Migration `20261019183928_tasks_projects`:
+  - `projects`: title, brief_original?, summary_technical, created_by.
+  - `tasks`: project_id?, title, description_technical, description_original?, job_role_id?, assignee_id?, status, priority, source, blocked_reason?, created_by, assigned_at?, completed_at?.
+  - `task_status_events`: from_status?, to_status, by_user_id, note?, at.
+- Shared (`schemas/tasks.ts`):
+  - Strict bodies with length caps. Text with control characters or bidi overrides is refused.
+  - Employee view `MyTask` vs owner view `Task`.
+  - The status action table `employeeTaskActions` / `canEmployeeSetStatus`, used by both the server and the buttons.
+- Business rules decided with the user (2026-10-20):
+  - While a task is not completed, the owner can edit it and send it to someone else. Reassigning sets it back to Pending and is logged as "Reassigned". Only unsent tasks can be deleted.
+  - Only the assigned employee changes the status: Start, Mark blocked (a reason of 3-500 characters is required), Resume, Complete, Reopen. Every change is a `task_status_events` row.
+- Server (routes → services → repositories):
+  - Owner: `GET/POST /projects`, `GET/PATCH /projects/:id`, `POST /projects/:id/tasks`, `GET /tasks` (filters assigneeId, status, jobRoleId, projectId), `POST /tasks/direct`, `PATCH/DELETE /tasks/:id`, `POST /tasks/:id/assign`.
+  - Employee: `GET /tasks/mine`, `POST /tasks/:id/status`.
+  - Creating a project with its tasks is one transaction.
+  - Assign and status changes use a guarded update (expected status and assignee) inside a transaction with the event row, so two concurrent changes cannot both win (409 `TASK_CHANGED`).
+  - Someone else's task answers 404.
+  - Only active employees can be assigned; the check runs inside the transaction.
+  - An owner edit to a task already sent writes an audit row with the changed field names, never the text.
+  - Events `task:assigned` and `task:status-changed` go on the bus. `server.ts` logs ids only.
+- Web:
+  - **Projects**: list with status counts.
+  - **New project**:
+    - Brief, then "Generate tasks with AI" or "Write it by hand".
+    - A vague brief shows the AI's clarifying questions. An unknown role shows "Check the role".
+    - The summary and tasks can be edited, removed and added. "Generate again" asks before replacing the edits. Save project.
+    - Leaving with unsaved work asks first. The logic is a pure reducer, `projectDraft.ts`.
+  - **Project page**: editable summary; tasks with status, assignee and blocked reason; Assign or "Send to someone else"; Edit; Delete (unsent only); Add task.
+  - **Assign modal**: the role filter starts at the task's role, plus a name search over active employees, then "Send with project summary".
+  - **Tasks board**:
+    - Four columns from 768 px; on a phone, a status picker.
+    - Filters by employee, role and project. Refetches every 30 s.
+    - Card details hold the description, the owner's wording, Edit and "Send to someone else".
+  - **Direct task modal**: employee, plain words, "Make technical version" (P2) or "Write it myself", edit, Send.
+  - **Employee My tasks**: tabs Pending / In progress / Blocked / Completed. Each card shows the project summary. Mark blocked asks for the reason.
+  - **My Day**: a "Next task" shortcut.
+  - **Overview**: task counts by status and "New project". **Employee page**: a Tasks section.
+  - LLM and user text is always rendered as plain text (`PlainText`). When the AI is offline (`/ai/health`) or a call fails (502/503/429), the page says so and offers manual entry.
+  - Navigation: the owner menu adds Projects and Tasks. The phone tabs are Overview, Tasks, Employees, More; Projects and Invites are under More. The employee menu adds My tasks.
+- E2E:
+  - `apps/server/src/test/fake-ollama.ts` is a tiny Ollama stand-in on 127.0.0.1:4101, started only by `e2e-server.ts`, which now refuses to run with `NODE_ENV=production`.
+  - It gives fixed answers, plus a vague-brief path. `POST /__e2e/state {down}` drops connections, so the real client sees a stopped Ollama.
+  - `e2e/tasks.spec.ts` runs on desktop and phone:
+    1. vague brief → questions; brief → tasks → edit, remove, add → Save → Assign (role pre-selected) → the employee sees the project summary, Starts and Completes → the owner's board shows it under Completed;
+    2. with Ollama "stopped": a project by hand and a direct task by hand, both reach the employee.
+  - No side-scroll at 390 px on the new pages.
+- Tests: 234 server in 25 files (new: `projects.test.ts` 6, `tasks.test.ts` 10, RBAC lists extended), 41 shared, 76 web (new: `projectDraft` 7, `lib/tasks` 5), 1 agent. Playwright 16 tests (4 new).
+- Security review (security-reviewer agent): no Critical, High or Medium findings. Six Low findings:
+  - Fixed: assignee re-checked inside the transaction (L1); audit of edits to sent tasks (L3); control and bidi characters refused (L4); open tasks are never cut off the board (L5); the e2e server refuses production and the fake Ollama caps request bodies (L6).
+  - Both test gaps are closed: the exact key list of the employee view, and the previous assignee gets 404 after a reassign.
+
+**Deviations from the plan**
+- New beyond ARCHITECTURE §4:
+  - task source `MANUAL` (a project task typed by the owner);
+  - columns `tasks.blocked_reason`, `description_original` on direct tasks only, `created_by`, `created_at`, `updated_at`;
+  - `task_status_events.note` (blocked reason or "Reassigned");
+  - `projects.updated_at`; `brief_original` is nullable (a project typed by hand).
+- "Employee is notified" (O-2): for now the employee sees the task in My tasks and on My Day, which refresh every 30 s. The toast needs Socket.IO (Phase 7), which must forward only `{taskId, at}` of `task:assigned` to the employee, not `previousAssigneeId`.
+- `GET /tasks` returns every open task plus at most 500 completed ones (newest first). The Overview "Completed" count therefore stops at 500. `GET /tasks/mine` is not capped yet. Revisit both in Phase 12 if the lists grow.
+- Deferred to Phase 12: a rate limit on employee status changes (security L2). Each change writes an event, so a loop could flood the owner's alerts once Phase 7 forwards them.
+- Tasks of a project are ordered by `created_at`, set by the app (1 ms apart inside the create transaction), because the database `now()` is the same for the whole transaction.
+- No new dependencies.
+
 ## Decisions
 (Record decisions made with the client, e.g. answers to PRD open questions.)
 Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The ones that affect the build:
@@ -286,5 +351,14 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [ ] Phase 4: read `llm-eval-results/qwen3.5-4b.md` (and the 8B report) with the owner and judge whether tasks and plain text make sense; run `pnpm llm:eval -- --model qwen3.5:4b --language hinglish` too and let a Hinglish speaker judge it. Write the verdict under Phase 4 above.
 - [x] Phase 4: with `pnpm dev` running, quit Ollama and call the AI endpoints (README "AI assistant"). Done by Claude on 2026-10-19: with Ollama running all four answered (health `gpuPercent: 100`); with Ollama quit, breakdown, translate-task and translate-update gave 503 `LLM_UNAVAILABLE` in 0.2 s, health said `down`, and `/employees` and `/job-roles` still worked; after restarting Ollama the next call worked with no server restart (11 s cold load).
 - [ ] Phase 4: optional, `pnpm env:setup --add-missing` to add `OLLAMA_TIMEOUT_MS` and `PLAIN_LANGUAGE` to `.env` (the defaults apply without them).
+- [ ] Phase 5 [TEST]: collect 3-5 REAL project descriptions from the owner. With `pnpm dev` and Ollama running, try each one:
+  - Projects → New project → Generate. Check the summary, the tasks and the roles.
+  - Edit, Save, Assign to a test employee.
+  - In a private window, as that employee, Start → Mark blocked → Resume → Complete.
+  - Check the board.
+
+  Add any missing job roles. There is no screen for that yet, so use `POST /api/v1/job-roles` (README "Trying the API with curl"), or ask me to add a page.
+- [ ] Phase 5: quit Ollama and repeat once by hand: "Write it by hand" for a project, and a Direct task with "Write it myself". Both must reach the employee.
+- [ ] Phase 5: open Projects and Tasks on your phone through the tunnel (see Phase 3). Check the board's status picker and the Assign modal.
 - [ ] Phase 11 / on-site: on the client's 4 GB RTX 3050, pull qwen3.5:4b, run the eval and check `ollama ps` says 100% GPU. If not, try `ollama pull qwen3.5:2b` (or `OLLAMA_NUM_CTX=3072`) and re-run. Record the final model (PRD Q21).
 - [ ] Phase 11: behind Cloudflare Tunnel, set `TRUST_PROXY=true` and use the real client IP (CF-Connecting-IP); otherwise every request looks like one IP and the per-IP limits act globally.

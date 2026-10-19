@@ -8,10 +8,16 @@ import { ROOT_ENV_PATH } from '../config/env';
 import { createDataAccess } from '../repositories';
 import { createPrismaClient } from '../repositories/prisma';
 import { runSeed } from '../services/seed.service';
+import { FAKE_OLLAMA_MODEL, startFakeOllama } from './fake-ollama';
 
 const SERVER_DIR = fileURLToPath(new URL('../..', import.meta.url));
 
 if (existsSync(ROOT_ENV_PATH)) process.loadEnvFile(ROOT_ENV_PATH);
+
+// This script drops a database and talks to a fake AI: never on a real installation.
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('e2e-server is for Playwright test runs only, not production');
+}
 
 const required = (name: string) => {
   const value = process.env[name];
@@ -65,5 +71,11 @@ process.env.PORT = process.env.E2E_API_PORT ?? '4100';
 process.env.HOST = '127.0.0.1';
 process.env.LOG_LEVEL = 'warn';
 process.env.FACE_ENROLLMENT_REQUIRED = 'false';
+
+// A fake Ollama with fixed answers (no GPU needed); the tests can switch it off.
+const fakeOllamaPort = Number(process.env.E2E_FAKE_OLLAMA_PORT ?? '4101');
+await startFakeOllama(fakeOllamaPort);
+process.env.OLLAMA_BASE_URL = `http://127.0.0.1:${fakeOllamaPort}`;
+process.env.OLLAMA_MODEL = FAKE_OLLAMA_MODEL;
 
 await import('../server');

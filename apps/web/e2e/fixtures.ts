@@ -2,6 +2,15 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 
 export const E2E_API_PORT = 4100;
 export const E2E_WEB_PORT = 5174;
+export const E2E_FAKE_OLLAMA_PORT = 4101;
+
+/** Switch the fake Ollama (apps/server/src/test/fake-ollama.ts) off or on again. */
+export async function setOllamaDown(request: APIRequestContext, down: boolean) {
+  const res = await request.post(`http://127.0.0.1:${E2E_FAKE_OLLAMA_PORT}/__e2e/state`, {
+    data: { down },
+  });
+  expect(res.ok()).toBeTruthy();
+}
 
 /** Throwaway owner of the `_e2e` database, which is re-created on every run. Not a secret. */
 export const E2E_OWNER = {
@@ -24,6 +33,14 @@ export async function loginAs(page: Page, email: string, password: string, home:
   await expect(page).toHaveURL(new RegExp(`${home}$`));
 }
 
+/** The page must not scroll sideways (phone layouts). */
+export async function expectNoSideScroll(page: Page) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+}
+
 /** "01:02:05" -> 3725 */
 export function clockToSec(text: string): number {
   const [h, m, s] = text.trim().split(':').map(Number) as [number, number, number];
@@ -31,7 +48,10 @@ export function clockToSec(text: string): number {
 }
 
 /** Creates an employee through the API (owner invite -> claim -> complete), for tests that only need an account. */
-export async function createEmployeeViaApi(request: APIRequestContext) {
+export async function createEmployeeViaApi(
+  request: APIRequestContext,
+  opts: { name?: string; roleKey?: string } = {},
+) {
   const login = await request.post('/api/v1/auth/login', { data: E2E_OWNER });
   expect(login.ok()).toBeTruthy();
   const token = ((await login.json()) as { data: { accessToken: string } }).data.accessToken;
@@ -46,8 +66,12 @@ export async function createEmployeeViaApi(request: APIRequestContext) {
   const claim = await request.post('/api/v1/register/claim', { data: { code } });
   expect(claim.ok()).toBeTruthy();
   const claimed = (await claim.json()) as {
-    data: { registrationToken: string; jobRoles: { id: string }[] };
+    data: { registrationToken: string; jobRoles: { id: string; key: string }[] };
   };
+  const role = opts.roleKey
+    ? claimed.data.jobRoles.find((r) => r.key === opts.roleKey)
+    : claimed.data.jobRoles[0];
+  expect(role, `job role ${opts.roleKey ?? '(first)'}`).toBeDefined();
   const consent = await request.get('/api/v1/register/consent');
   const { version } = ((await consent.json()) as { data: { version: string } }).data;
 
@@ -55,10 +79,10 @@ export async function createEmployeeViaApi(request: APIRequestContext) {
   const complete = await request.post('/api/v1/register/complete', {
     data: {
       token: claimed.data.registrationToken,
-      name: 'Api Employee',
+      name: opts.name ?? 'Api Employee',
       email,
       password: EMPLOYEE_PASSWORD,
-      jobRoleId: claimed.data.jobRoles[0]?.id,
+      jobRoleId: role?.id,
       phone: '+91 98765 43210',
       emergencyContactName: 'Someone Else',
       emergencyContactPhone: '+91 91234 56789',

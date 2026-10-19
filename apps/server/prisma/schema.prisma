@@ -47,6 +47,28 @@ enum HeartbeatState {
   AWAY
 }
 
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskSource {
+  /// From the AI breakdown of a project brief (possibly edited by the owner).
+  AI_BREAKDOWN
+  /// Typed by the owner inside a project (e.g. while the AI was offline).
+  MANUAL
+  /// Direct task to one employee, no project.
+  DIRECT
+}
+
 enum CodeStatus {
   ACTIVE
   CLAIMED
@@ -80,16 +102,20 @@ model User {
   updatedAt             DateTime    @updatedAt @map("updated_at")
   deactivatedAt         DateTime?   @map("deactivated_at")
 
-  jobRole         JobRole?        @relation(fields: [jobRoleId], references: [id])
+  jobRole         JobRole?          @relation(fields: [jobRoleId], references: [id])
   devices         Device[]
   refreshTokens   RefreshToken[]
   consentRecords  ConsentRecord[]
-  codesCreated    AccessCode[]    @relation("CodeCreatedBy")
-  codesTargeted   AccessCode[]    @relation("CodeTarget")
-  codesRegistered AccessCode[]    @relation("CodeRegistered")
+  codesCreated    AccessCode[]      @relation("CodeCreatedBy")
+  codesTargeted   AccessCode[]      @relation("CodeTarget")
+  codesRegistered AccessCode[]      @relation("CodeRegistered")
   auditEntries    AuditLog[]
   workSessions    WorkSession[]
   heartbeats      Heartbeat[]
+  projectsCreated Project[]         @relation("ProjectCreatedBy")
+  tasksAssigned   Task[]            @relation("TaskAssignee")
+  tasksCreated    Task[]            @relation("TaskCreatedBy")
+  taskEvents      TaskStatusEvent[]
 
   @@index([role, status])
   @@map("users")
@@ -102,6 +128,7 @@ model JobRole {
 
   users       User[]
   presetCodes AccessCode[]
+  tasks       Task[]
 
   @@map("job_roles")
 }
@@ -251,4 +278,74 @@ model WorkSessionGap {
 
   @@index([sessionId])
   @@map("work_session_gaps")
+}
+
+model Project {
+  id               String   @id @default(uuid()) @db.Uuid
+  title            String
+  /// The owner's own words (often Hinglish). Null for a project typed by hand without a brief.
+  briefOriginal    String?  @map("brief_original")
+  /// Sent to employees together with each task.
+  summaryTechnical String   @map("summary_technical")
+  createdById      String   @map("created_by") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  createdBy User   @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  tasks     Task[]
+
+  @@index([createdAt])
+  @@map("projects")
+}
+
+model Task {
+  id                   String       @id @default(uuid()) @db.Uuid
+  /// Null for a direct task.
+  projectId            String?      @map("project_id") @db.Uuid
+  title                String
+  descriptionTechnical String       @map("description_technical")
+  /// The owner's plain wording of a direct task. Owner-only.
+  descriptionOriginal  String?      @map("description_original")
+  jobRoleId            String?      @map("job_role_id") @db.Uuid
+  /// Null until the owner sends the task.
+  assigneeId           String?      @map("assignee_id") @db.Uuid
+  status               TaskStatus   @default(PENDING)
+  priority             TaskPriority
+  source               TaskSource
+  /// Set while the task is BLOCKED.
+  blockedReason        String?      @map("blocked_reason")
+  createdById          String       @map("created_by") @db.Uuid
+  assignedAt           DateTime?    @map("assigned_at")
+  completedAt          DateTime?    @map("completed_at")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  project   Project?          @relation(fields: [projectId], references: [id])
+  jobRole   JobRole?          @relation(fields: [jobRoleId], references: [id])
+  assignee  User?             @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User              @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  events    TaskStatusEvent[]
+
+  @@index([assigneeId, status])
+  @@index([projectId])
+  @@map("tasks")
+}
+
+/// Every status change (and every (re)assignment) of a task.
+model TaskStatusEvent {
+  id         String      @id @default(uuid()) @db.Uuid
+  taskId     String      @map("task_id") @db.Uuid
+  /// Null on the first assignment.
+  fromStatus TaskStatus? @map("from_status")
+  toStatus   TaskStatus  @map("to_status")
+  byUserId   String      @map("by_user_id") @db.Uuid
+  /// The blocked reason, or "Reassigned".
+  note       String?
+  at         DateTime
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  byUser User @relation(fields: [byUserId], references: [id])
+
+  @@index([taskId, at])
+  @@map("task_status_events")
 }

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { DeviceMode } from '@lk/shared';
+import type { DeviceMode, TaskStatus } from '@lk/shared';
 
 /**
  * In-process events for the owner. Socket.IO (Phase 7) subscribes to this bus and pushes
@@ -24,6 +24,21 @@ export interface AppEvents {
       | 'REFRESH_TOKEN_REUSE'
       | 'DUPLICATE_FACE';
     message: string;
+    at: string;
+  };
+  /** A task was sent (or re-sent) to an employee. Phase 7 shows the employee a toast. */
+  'task:assigned': {
+    taskId: string;
+    assigneeId: string;
+    previousAssigneeId: string | null;
+    at: string;
+  };
+  /** The employee changed a task's status. Phase 7 updates the owner's board live. */
+  'task:status-changed': {
+    taskId: string;
+    assigneeId: string;
+    from: TaskStatus;
+    to: TaskStatus;
     at: string;
   };
 }

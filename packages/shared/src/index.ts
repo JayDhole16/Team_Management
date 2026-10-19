@@ -10,4 +10,5 @@ export * from './schemas/password';
 export * from './schemas/register';
 export * from './schemas/reports';
 export * from './schemas/sessions';
+export * from './schemas/tasks';
 export type * from './types';

@@ -19,6 +19,13 @@ const bus = app.serviceContext.bus;
 // Socket.IO delivers these to the owner in Phase 7; for now they are logged (no secrets in them).
 bus.on('employee:registered', (e) => app.log.info({ userId: e.userId }, 'employee registered'));
 bus.on('security:alert', (e) => app.log.warn({ kind: e.kind }, `security alert: ${e.message}`));
+// Ids only: task text is never logged.
+bus.on('task:assigned', (e) =>
+  app.log.info({ taskId: e.taskId, assigneeId: e.assigneeId }, 'task assigned'),
+);
+bus.on('task:status-changed', (e) =>
+  app.log.info({ taskId: e.taskId, from: e.from, to: e.to }, 'task status changed'),
+);
 
 const stopExpireJob = startExpireCodesJob(app.serviceContext, app.log);
 const stopSessionJobs = startSessionJobs(app.serviceContext, app.log);

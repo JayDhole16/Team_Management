@@ -1,6 +1,22 @@
-import type { CodeListItem, CodeStatus, Employee, Me, WorkSession } from '@lk/shared';
-import type { AccessCode, User, WorkSession as WorkSessionRow } from '../generated/prisma/client';
+import type {
+  CodeListItem,
+  CodeStatus,
+  Employee,
+  Me,
+  MyTask,
+  Project,
+  Task,
+  TaskStatusCounts,
+  WorkSession,
+} from '@lk/shared';
+import type {
+  AccessCode,
+  Project as ProjectRow,
+  User,
+  WorkSession as WorkSessionRow,
+} from '../generated/prisma/client';
 import { dbDateToString } from '../lib/clock';
+import type { TaskRow } from '../repositories/task.repository';
 
 // Explicit field lists: password hashes, code hashes and face templates can never leak
 // into a response by accident.
@@ -71,5 +87,56 @@ export function toWorkSession(session: WorkSessionRow): WorkSession {
     endedAt: session.endedAt?.toISOString() ?? null,
     endReason: session.endReason,
     lastHeartbeatAt: session.lastHeartbeatAt?.toISOString() ?? null,
+  };
+}
+
+/** The employee's view: no owner wording, no assignee details. */
+export function toMyTask(task: TaskRow): MyTask {
+  return {
+    id: task.id,
+    title: task.title,
+    descriptionTechnical: task.descriptionTechnical,
+    jobRoleId: task.jobRoleId,
+    priority: task.priority,
+    status: task.status,
+    source: task.source,
+    blockedReason: task.blockedReason,
+    assignedAt: task.assignedAt?.toISOString() ?? null,
+    completedAt: task.completedAt?.toISOString() ?? null,
+    updatedAt: task.updatedAt.toISOString(),
+    project: task.project
+      ? {
+          id: task.project.id,
+          title: task.project.title,
+          summaryTechnical: task.project.summaryTechnical,
+        }
+      : null,
+  };
+}
+
+export function toTask(task: TaskRow): Task {
+  return {
+    ...toMyTask(task),
+    projectId: task.projectId,
+    descriptionOriginal: task.descriptionOriginal,
+    assigneeId: task.assigneeId,
+    assigneeName: task.assignee?.name ?? null,
+    createdAt: task.createdAt.toISOString(),
+  };
+}
+
+export function emptyTaskCounts(): TaskStatusCounts {
+  return { UNASSIGNED: 0, PENDING: 0, IN_PROGRESS: 0, BLOCKED: 0, COMPLETED: 0 };
+}
+
+export function toProject(project: ProjectRow, counts: TaskStatusCounts): Project {
+  return {
+    id: project.id,
+    title: project.title,
+    briefOriginal: project.briefOriginal,
+    summaryTechnical: project.summaryTechnical,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
+    counts,
   };
 }

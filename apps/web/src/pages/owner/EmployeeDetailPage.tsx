@@ -20,6 +20,9 @@ import {
   updateEmployee,
 } from '../../api/employees';
 import { listJobRoles } from '../../api/jobRoles';
+import { listTasks } from '../../api/tasks';
+import { TaskStatusBadge } from '../../components/TaskViews';
+import { sortTasks } from '../../lib/tasks';
 import { fetchMonthHours, fetchTodayHours } from '../../api/reports';
 import { CodePanel } from '../../components/CodePanel';
 import { MonthHoursView, MonthPicker, SessionList, Stat } from '../../components/HoursViews';
@@ -58,6 +61,7 @@ export function EmployeeDetailPage() {
       <PageHeader title={emp.name} actions={<StatusBadge status={emp.status} />} />
       <Profile emp={emp} roles={roles.data} />
       <Hours userId={emp.id} />
+      <Tasks userId={emp.id} />
       {emp.status === 'ACTIVE' && <Settings key={emp.id} emp={emp} roles={roles.data ?? []} />}
       <Actions emp={emp} />
     </div>
@@ -125,6 +129,36 @@ function Hours({ userId }: { userId: string }) {
             <SessionList data={monthly.data} />
           </details>
         </div>
+      )}
+    </Card>
+  );
+}
+
+function Tasks({ userId }: { userId: string }) {
+  const tasks = useQuery({
+    queryKey: ['tasks', { assigneeId: userId }],
+    queryFn: () => listTasks({ assigneeId: userId }),
+  });
+  return (
+    <Card>
+      <h2 className="mb-2 font-semibold">Tasks</h2>
+      {tasks.isPending && <Spinner label="Loading tasks…" />}
+      <ErrorBox error={tasks.error} />
+      {tasks.data?.length === 0 && <p className="text-sm text-gray-600">No tasks sent yet.</p>}
+      {tasks.data && tasks.data.length > 0 && (
+        <ul className="divide-y divide-gray-100">
+          {sortTasks(tasks.data).map((task) => (
+            <li key={task.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <span className="min-w-0 break-words">
+                <span className="block text-sm font-medium">{task.title}</span>
+                <span className="block text-xs text-gray-600">
+                  {task.project?.title ?? 'Direct task'}
+                </span>
+              </span>
+              <TaskStatusBadge status={task.status} />
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );

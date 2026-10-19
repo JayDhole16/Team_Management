@@ -6,6 +6,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from 'react';
 import { errorMessage } from '../api/errors';
 
@@ -65,6 +66,37 @@ export function Field({ label, error, hint, className = '', ...rest }: FieldProp
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${id}-error` : undefined}
         className={`block min-h-11 w-full rounded-lg border px-3 text-base text-gray-900 read-only:bg-gray-100 disabled:bg-gray-100 ${error ? 'border-red-500' : 'border-gray-300'}`}
+        {...rest}
+      />
+      {hint && !error && <p className="text-xs text-gray-600">{hint}</p>}
+      {error && (
+        <p id={`${id}-error`} className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  error?: string | undefined;
+  hint?: ReactNode;
+}
+
+export function TextAreaField({ label, error, hint, className = '', ...rest }: TextAreaFieldProps) {
+  const id = useId();
+  return (
+    <div className={`space-y-1 ${className}`}>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-800">
+        {label}
+      </label>
+      <textarea
+        id={id}
+        rows={4}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        className={`block w-full rounded-lg border px-3 py-2 text-base text-gray-900 disabled:bg-gray-100 ${error ? 'border-red-500' : 'border-gray-300'}`}
         {...rest}
       />
       {hint && !error && <p className="text-xs text-gray-600">{hint}</p>}

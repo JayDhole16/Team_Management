@@ -23,3 +23,4 @@ export const forbidden = () =>
 export const notFound = (what = 'Resource') => new AppError(404, 'NOT_FOUND', `${what} not found`);
 export const badRequest = (message: string, code = 'BAD_REQUEST') =>
   new AppError(400, code, message);
+export const conflict = (message: string, code = 'CONFLICT') => new AppError(409, code, message);
