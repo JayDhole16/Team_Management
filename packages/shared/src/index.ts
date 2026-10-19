@@ -11,4 +11,5 @@ export * from './schemas/register';
 export * from './schemas/reports';
 export * from './schemas/sessions';
 export * from './schemas/tasks';
+export * from './schemas/updates';
 export type * from './types';

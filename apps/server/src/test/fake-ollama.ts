@@ -49,6 +49,12 @@ const TRANSLATED = {
 
 const UPDATE = { plain: 'The work is going well.', blockers: [] };
 
+/** An update that mentions "waiting" gets a blocker (e2e/updates.spec.ts). */
+const UPDATE_WITH_BLOCKER = {
+  plain: 'The login fix is done. Next is the cart page.',
+  blockers: ['Waiting for the payment API key from the client.'],
+};
+
 const MAX_BODY_BYTES = 1_000_000;
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -67,11 +73,13 @@ function answerFor(body: {
   messages?: { content: string }[];
 }): unknown {
   const keys = Object.keys(body.format?.properties ?? {});
+  const userText = body.messages?.at(-1)?.content ?? '';
   if (keys.includes('projectTitle')) {
-    const userText = body.messages?.at(-1)?.content ?? '';
     return userText.includes(VAGUE_MARKER) ? VAGUE : BREAKDOWN;
   }
-  if (keys.includes('plain')) return UPDATE;
+  if (keys.includes('plain')) {
+    return userText.toLowerCase().includes('waiting') ? UPDATE_WITH_BLOCKER : UPDATE;
+  }
   return TRANSLATED;
 }
 

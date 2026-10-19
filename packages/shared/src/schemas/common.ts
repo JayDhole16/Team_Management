@@ -12,6 +12,38 @@ export type DeviceMode = z.infer<typeof DeviceModeSchema>;
 
 export const IdSchema = z.uuid();
 
+/**
+ * Control characters (NUL cannot be stored in PostgreSQL text) and bidi overrides (they can make
+ * text display misleadingly) are refused. Newlines and tabs are fine.
+ */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const UNSAFE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/;
+export const hasUnsafeChars = (text: string): boolean => UNSAFE_CHARS.test(text);
+/**
+ * Also invisible in LLM output: bidi marks, zero-width space, line/paragraph separators, BOM,
+ * interlinear annotation marks. (Not refused in user text: ZWJ/ZWNJ are needed for Hindi
+ * script and emoji, so U+200C/U+200D are kept.)
+ */
+const INVISIBLE_IN_LLM_TEXT = /[\u061C\u200B\u200E\u200F\u2028\u2029\uFEFF\uFFF9-\uFFFB]/g;
+/** A surrogate half without its pair (PostgreSQL would store it as U+FFFD). */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+/** For text we do not control (LLM output): drop unsafe and invisible characters instead of refusing. */
+export const stripUnsafeChars = (text: string): string =>
+  text
+    .replace(new RegExp(UNSAFE_CHARS.source, 'g'), '')
+    .replace(INVISIBLE_IN_LLM_TEXT, '')
+    .replace(LONE_SURROGATE, '');
+
+/** Trimmed text with length limits and no unsafe characters (user-written text). */
+export const safeText = (min: number, max: number) =>
+  z
+    .string()
+    .trim()
+    .min(min)
+    .max(max)
+    .refine((v) => !hasUnsafeChars(v), 'Remove the special (invisible) characters');
+
 /** Emails are compared case-insensitively, so they are always stored lowercased. */
 export const EmailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
 

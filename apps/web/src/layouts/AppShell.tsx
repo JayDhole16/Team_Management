@@ -8,6 +8,21 @@ export interface NavItem {
   label: string;
   /** Match only this exact path (for the section home). */
   end?: boolean;
+  /** A count shown next to the label (e.g. unread updates); hidden when 0 or missing. */
+  badge?: number | undefined;
+}
+
+function NavBadge({ count }: { count: number | undefined }) {
+  if (!count) return null;
+  return (
+    <span
+      className="ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full bg-blue-700 px-1.5 text-xs font-semibold text-white"
+      aria-label={`${count} new`}
+      data-testid="nav-badge"
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  );
 }
 
 /**
@@ -61,6 +76,7 @@ export function AppShell({
             }
           >
             {item.label}
+            <NavBadge count={item.badge} />
           </NavLink>
         ))}
       </nav>
@@ -78,6 +94,7 @@ function SideLink({ item }: { item: NavItem }) {
       }
     >
       {item.label}
+      <NavBadge count={item.badge} />
     </NavLink>
   );
 }

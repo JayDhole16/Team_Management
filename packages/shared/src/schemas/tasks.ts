@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TaskPrioritySchema } from './ai';
-import { IdSchema } from './common';
+import { IdSchema, safeText } from './common';
 
 export const TaskStatusSchema = z.enum(['PENDING', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED']);
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;
@@ -55,22 +55,7 @@ export function canEmployeeSetStatus(from: TaskStatus, to: TaskStatus): boolean 
 
 // --- Request bodies ---
 
-/**
- * Control characters (NUL cannot be stored in PostgreSQL text) and bidi overrides (they can make
- * text display misleadingly) are refused. Newlines and tabs are fine.
- */
-// eslint-disable-next-line no-control-regex -- matching control characters is the point
-const UNSAFE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/;
-export const hasUnsafeChars = (text: string): boolean => UNSAFE_CHARS.test(text);
-
-/** Trimmed text with length limits and no unsafe characters. */
-const text = (min: number, max: number) =>
-  z
-    .string()
-    .trim()
-    .min(min)
-    .max(max)
-    .refine((v) => !hasUnsafeChars(v), 'Remove the special (invisible) characters');
+const text = safeText;
 
 const TaskTitleSchema = text(2, 200);
 const TaskDescriptionSchema = text(1, 4000);

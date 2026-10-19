@@ -24,6 +24,7 @@ Open http://localhost:5173 and log in with your OWNER_EMAIL / OWNER_PASSWORD. ht
 - **New employee:** on the login page, "Register as employee": code, details, consent, face scan (a placeholder until Phase 9), done.
 - **Employee:** logging in starts the work session. My Day shows the timer with Stop session (break) and Resume, plus hours today and this month. My hours has the per-day list.
 - **Projects and tasks (Phase 5):** Projects -> New project: describe it in your own words, "Generate tasks with AI" (or "Write it by hand"), edit, Save, then Assign each task. Tasks is the board (filters by employee, role, project) with "Direct task". Employees see My tasks (Start, Mark blocked, Complete, Reopen) and a Next task shortcut on My Day.
+- **Progress updates (Phase 6):** employees open Updates, write what they did (optionally pick a task), press "Preview plain version", then Send. When the AI is offline, "Send without plain version" appears. The owner's Updates page (with the unread count in the menu) shows the AI's plain summary first, blockers highlighted, and the original under "Show original (technical)"; "Mark as read" or "Mark all as read".
 - **Phone:** below 768 px the menu becomes a bottom tab bar. To try it on a real phone, start the dev server with `LK_TUNNEL=1 pnpm dev` (Git Bash), run `cloudflared tunnel --url http://localhost:5173` and open the https address it prints. This is for testing only: the address changes every run, anyone with it can reach your dev server, so close the tunnel afterwards. Never set `TRUST_PROXY=true` for a quick tunnel.
 
 After pulling a change that adds new keys to `.env.example`, run `pnpm env:setup --add-missing`. It appends only the missing keys, generates random secrets for them and never prints values.
@@ -91,7 +92,8 @@ Needs Ollama running with `OLLAMA_MODEL` pulled (see "Local LLM" below). With Ol
 curl -s $API/ai/health -H "authorization: Bearer $OWNER"
 curl -s -X POST $API/ai/breakdown -H "authorization: Bearer $OWNER" -H 'content-type: application/json'   -d '{"brief":"Instagram ke liye 10 reels banane hain, saath me 3 logo options bhi chahiye."}'
 curl -s -X POST $API/ai/translate-task -H "authorization: Bearer $OWNER" -H 'content-type: application/json'   -d '{"text":"Login page pe forgot password kaam nahi kar raha, theek kar do.","jobRoleId":"<job role id>"}'
-curl -s -X POST $API/ai/translate-update -H "authorization: Bearer $EMP" -H 'content-type: application/json'   -d '{"text":"Dockerized the API. Blocked on the SSL certificate from the client DNS."}'
+# Owner only since Phase 6 (employees use POST /updates/preview, below)
+curl -s -X POST $API/ai/translate-update -H "authorization: Bearer $OWNER" -H 'content-type: application/json'   -d '{"text":"Dockerized the API. Blocked on the SSL certificate from the client DNS."}'
 ```
 
 ### Projects and tasks (Phase 5)
@@ -108,6 +110,23 @@ curl -s "$API/tasks?status=PENDING" -H "authorization: Bearer $OWNER"   # board;
 # Employee: own tasks, then Start / Mark blocked (reason required) / Complete
 curl -s $API/tasks/mine -H "authorization: Bearer $EMP"
 curl -s -X POST $API/tasks/<task id>/status -H "authorization: Bearer $EMP" -H 'content-type: application/json' -d '{"status":"BLOCKED","reason":"Waiting for the logo files"}'
+```
+
+### Progress updates (Phase 6)
+
+The employee previews the plain version, then sends exactly that preview (the `preview` object from the answer, unchanged). If the text changes or the preview is older than an hour, sending gives 400 `PREVIEW_MISMATCH`: preview again. With Ollama stopped, leave `preview` out: the owner then sees the technical text with a note.
+
+```bash
+# Employee: preview (needs Ollama), then send with the preview, or without one
+curl -s -X POST $API/updates/preview -H "authorization: Bearer $EMP" -H 'content-type: application/json' -d '{"textTechnical":"Fixed the JWT refresh race. Waiting for the staging DB password."}'
+curl -s -X POST $API/updates -H "authorization: Bearer $EMP" -H 'content-type: application/json' -d '{"textTechnical":"Fixed the JWT refresh race. Waiting for the staging DB password.","taskId":null,"preview":{"plain":"<plain>","blockers":["<blocker>"],"previewToken":"<previewToken>"}}'
+curl -s -X POST $API/updates -H "authorization: Bearer $EMP" -H 'content-type: application/json' -d '{"textTechnical":"Refactored the cart reducer."}'
+curl -s $API/updates/mine -H "authorization: Bearer $EMP"
+# Owner: inbox (also employeeId, unread=true, limit, cursor=<nextCursor>), unread count, mark read
+curl -s "$API/updates?unread=true" -H "authorization: Bearer $OWNER"
+curl -s $API/updates/unread-count -H "authorization: Bearer $OWNER"
+curl -s -X PATCH $API/updates/<update id>/read -H "authorization: Bearer $OWNER"
+curl -s -X POST $API/updates/read-all -H "authorization: Bearer $OWNER" -H 'content-type: application/json' -d '{"upTo":"<createdAt of the newest update you saw>"}'
 ```
 
 ## Local LLM (Ollama)

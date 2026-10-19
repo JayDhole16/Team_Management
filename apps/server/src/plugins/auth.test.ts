@@ -56,6 +56,7 @@ describe('RBAC on every route', () => {
         'POST /api/v1/job-roles',
         'POST /api/v1/ai/breakdown',
         'POST /api/v1/ai/translate-task',
+        'POST /api/v1/ai/translate-update',
         'GET /api/v1/projects',
         'POST /api/v1/projects',
         'GET /api/v1/projects/:id',
@@ -66,6 +67,10 @@ describe('RBAC on every route', () => {
         'PATCH /api/v1/tasks/:id',
         'DELETE /api/v1/tasks/:id',
         'POST /api/v1/tasks/:id/assign',
+        'GET /api/v1/updates',
+        'GET /api/v1/updates/unread-count',
+        'PATCH /api/v1/updates/:id/read',
+        'POST /api/v1/updates/read-all',
       ]),
     );
   });
@@ -130,6 +135,9 @@ describe('RBAC on every route', () => {
         'POST /api/v1/agent/heartbeat',
         'GET /api/v1/tasks/mine',
         'POST /api/v1/tasks/:id/status',
+        'POST /api/v1/updates/preview',
+        'POST /api/v1/updates',
+        'GET /api/v1/updates/mine',
       ]),
     );
     for (const route of employeeOnly) {

@@ -3,6 +3,7 @@ import { AppShell, type NavItem } from './AppShell';
 const nav: NavItem[] = [
   { to: '/me', label: 'My Day', end: true },
   { to: '/me/tasks', label: 'My tasks' },
+  { to: '/me/updates', label: 'Updates' },
   { to: '/me/hours', label: 'My hours' },
   { to: '/me/profile', label: 'Profile' },
 ];

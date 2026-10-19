@@ -127,7 +127,7 @@ export async function translateTask(
   );
 }
 
-/** P3 (employee preview before sending an update; Phase 6 also calls it when saving). */
+/** P3. Employees preview their update through update.service.ts, which signs the result. */
 export function translateUpdate(
   ctx: ServiceContext,
   userId: string,

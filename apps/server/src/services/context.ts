@@ -11,6 +11,8 @@ export const LOGIN_FAILURES_PER_ACCOUNT = 10;
 export const CODE_FAILURES_PER_IP = 5;
 /** AI calls per user in the window. The GPU is shared, so one user cannot queue it up. */
 export const AI_CALLS_PER_USER = 60;
+/** Progress updates sent per employee in the window, so the owner's inbox cannot be flooded. */
+export const UPDATES_PER_USER = 30;
 
 export interface Limiters {
   /** Failed logins per IP. */
@@ -24,6 +26,8 @@ export interface Limiters {
   recovery: FailureLimiter;
   /** Every /ai/* call per user (counted as an attempt whether it succeeds or not). */
   ai: FailureLimiter;
+  /** Every progress update sent, per employee. */
+  updates: FailureLimiter;
 }
 
 export function createLimiters(env: Pick<Env, 'CLAIM_GLOBAL_FAILURE_CAP'>, now: Clock): Limiters {
@@ -35,6 +39,7 @@ export function createLimiters(env: Pick<Env, 'CLAIM_GLOBAL_FAILURE_CAP'>, now: 
     claim: perKey(CODE_FAILURES_PER_IP, env.CLAIM_GLOBAL_FAILURE_CAP),
     recovery: perKey(CODE_FAILURES_PER_IP),
     ai: perKey(AI_CALLS_PER_USER),
+    updates: perKey(UPDATES_PER_USER),
   };
 }
 

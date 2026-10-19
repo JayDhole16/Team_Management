@@ -41,6 +41,13 @@ export interface AppEvents {
     to: TaskStatus;
     at: string;
   };
+  /** An employee sent a progress update. Phase 7 refreshes the owner's unread count live.
+   *  Ids only: the text never goes on the bus. */
+  'update:sent': {
+    updateId: string;
+    employeeId: string;
+    at: string;
+  };
 }
 
 export interface EventBus {

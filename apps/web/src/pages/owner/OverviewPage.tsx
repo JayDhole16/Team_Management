@@ -5,14 +5,16 @@ import { Link } from 'react-router';
 import { listCodes } from '../../api/codes';
 import { listEmployees } from '../../api/employees';
 import { listTasks } from '../../api/tasks';
+import { listUpdates } from '../../api/updates';
 import { useUser } from '../../auth/AuthProvider';
 import { Stat } from '../../components/HoursViews';
-import { Button, ErrorBox, PageHeader } from '../../components/ui';
+import { InboxLink, RecentUpdates, useUnreadUpdates } from '../../components/UpdateViews';
+import { Button, Card, ErrorBox, PageHeader } from '../../components/ui';
 import { TASK_STATUS } from '../../lib/labels';
 import { AddEmployeeModal } from './AddEmployeeModal';
 import { NEW_PROJECT_LINK_CLASS } from './projects/ProjectsPage';
 
-/** More cards (live status, alerts, updates) come in later phases. */
+/** More cards (live status, alerts) come in Phase 7. */
 export function OverviewPage() {
   const user = useUser();
   const [adding, setAdding] = useState(false);
@@ -27,6 +29,12 @@ export function OverviewPage() {
     queryFn: () => listTasks(),
     refetchInterval: 30_000,
   });
+  const unread = useUnreadUpdates();
+  const recent = useQuery({
+    queryKey: ['updates', 'recent'],
+    queryFn: () => listUpdates({ limit: 3 }),
+    refetchInterval: 30_000,
+  });
 
   return (
     <div>
@@ -37,6 +45,7 @@ export function OverviewPage() {
           value={employees.data ? String(employees.data.length) : '…'}
         />
         <Stat label="Invites waiting" value={waiting === undefined ? '…' : String(waiting)} />
+        <Stat label="Unread updates" value={unread.data ? String(unread.data.count) : '…'} />
       </dl>
       <h2 className="mb-2 font-semibold">
         <Link to="/owner/tasks" className="text-blue-800 underline-offset-2 hover:underline">
@@ -52,7 +61,16 @@ export function OverviewPage() {
           />
         ))}
       </dl>
-      <ErrorBox error={employees.error ?? codes.error ?? tasks.error} />
+      {recent.data && recent.data.items.length > 0 && (
+        <Card className="mb-4 md:max-w-2xl">
+          <h2 className="font-semibold">Recent updates</h2>
+          <RecentUpdates updates={recent.data.items} showName />
+          <InboxLink>Open updates</InboxLink>
+        </Card>
+      )}
+      <ErrorBox
+        error={employees.error ?? codes.error ?? tasks.error ?? recent.error ?? unread.error}
+      />
       <div className="flex flex-wrap gap-2">
         <Link to="/owner/projects/new" className={NEW_PROJECT_LINK_CLASS}>
           New project

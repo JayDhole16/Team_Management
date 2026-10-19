@@ -26,6 +26,9 @@ bus.on('task:assigned', (e) =>
 bus.on('task:status-changed', (e) =>
   app.log.info({ taskId: e.taskId, from: e.from, to: e.to }, 'task status changed'),
 );
+bus.on('update:sent', (e) =>
+  app.log.info({ updateId: e.updateId, employeeId: e.employeeId }, 'progress update sent'),
+);
 
 const stopExpireJob = startExpireCodesJob(app.serviceContext, app.log);
 const stopSessionJobs = startSessionJobs(app.serviceContext, app.log);

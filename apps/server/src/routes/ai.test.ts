@@ -91,12 +91,11 @@ describe('AI routes', () => {
     expect(llm.requests).toHaveLength(0);
   });
 
-  it('translate-update works for an employee (E-4 preview)', async () => {
-    const employee = await h.registerEmployee();
+  it('translate-update works for the owner (employees use the signed /updates/preview)', async () => {
     llm.answers.push(
       JSON.stringify({ plain: 'Server is ready.', blockers: ['Waiting for domain.'] }),
     );
-    const res = await post('translate-update', employee.accessToken, {
+    const res = await post('translate-update', owner, {
       text: 'Dockerized the API. Blocked on SSL.',
     });
     expect(res.statusCode).toBe(200);
@@ -106,9 +105,9 @@ describe('AI routes', () => {
     });
   });
 
-  it('an employee gets 403 on breakdown and translate-task', async () => {
+  it('an employee gets 403 on breakdown, translate-task and translate-update', async () => {
     const employee = await h.registerEmployee();
-    for (const url of ['breakdown', 'translate-task']) {
+    for (const url of ['breakdown', 'translate-task', 'translate-update']) {
       const res = await post(url, employee.accessToken, { brief: BRIEF, text: 'x' });
       expect(res.statusCode, url).toBe(403);
     }
@@ -116,11 +115,10 @@ describe('AI routes', () => {
   });
 
   it('with Ollama stopped every endpoint returns a clean 503 LLM_UNAVAILABLE', async () => {
-    const employee = await h.registerEmployee();
     const calls = [
       post('breakdown', owner, { brief: BRIEF }),
       post('translate-task', owner, { text: 'Logo badlo' }),
-      post('translate-update', employee.accessToken, { text: 'Fixed the bug' }),
+      post('translate-update', owner, { text: 'Fixed the bug' }),
     ];
     for (const res of await Promise.all(calls)) {
       expect(res.statusCode).toBe(503);

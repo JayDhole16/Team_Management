@@ -21,6 +21,8 @@ import {
 } from '../../api/employees';
 import { listJobRoles } from '../../api/jobRoles';
 import { listTasks } from '../../api/tasks';
+import { listUpdates } from '../../api/updates';
+import { InboxLink, RecentUpdates } from '../../components/UpdateViews';
 import { TaskStatusBadge } from '../../components/TaskViews';
 import { sortTasks } from '../../lib/tasks';
 import { fetchMonthHours, fetchTodayHours } from '../../api/reports';
@@ -62,6 +64,7 @@ export function EmployeeDetailPage() {
       <Profile emp={emp} roles={roles.data} />
       <Hours userId={emp.id} />
       <Tasks userId={emp.id} />
+      <Updates userId={emp.id} />
       {emp.status === 'ACTIVE' && <Settings key={emp.id} emp={emp} roles={roles.data ?? []} />}
       <Actions emp={emp} />
     </div>
@@ -159,6 +162,27 @@ function Tasks({ userId }: { userId: string }) {
             </li>
           ))}
         </ul>
+      )}
+    </Card>
+  );
+}
+
+function Updates({ userId }: { userId: string }) {
+  const updates = useQuery({
+    queryKey: ['updates', 'employee', userId],
+    queryFn: () => listUpdates({ employeeId: userId, limit: 5 }),
+  });
+  return (
+    <Card>
+      <h2 className="mb-2 font-semibold">Updates</h2>
+      {updates.isPending && <Spinner label="Loading updates…" />}
+      <ErrorBox error={updates.error} />
+      {updates.data?.items.length === 0 && <p className="text-sm text-gray-600">No updates yet.</p>}
+      {updates.data && updates.data.items.length > 0 && (
+        <>
+          <RecentUpdates updates={updates.data.items} showName={false} />
+          <InboxLink employeeId={userId}>See all updates</InboxLink>
+        </>
       )}
     </Card>
   );

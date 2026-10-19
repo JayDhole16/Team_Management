@@ -10,7 +10,7 @@ Update this at the end of every phase (the `/phase` command does it).
 | 3 | Web shell, invite UI, registration wizard, timer | done | 2026-10-19 | Login, role-guarded owner/employee layouts, invite code UI, 5-step registration wizard, forgot password, employee timer; Playwright on desktop and 390 px. See "Phase 3" below. |
 | 4 | LLM service | done | 2026-10-19 | Ollama client, P1/P2/P3 pipelines with one retry, /ai endpoints (503 when Ollama is down), eval script; qwen3.5:4b passes 24/24 at 100% GPU. See "Phase 4" below. |
 | 5 | Projects and tasks | done | 2026-10-20 | Projects (AI breakdown or by hand), assign/reassign, direct tasks, owner board, employee My tasks; Playwright on desktop and phone with a fake Ollama. See "Phase 5" below. |
-| 6 | Progress updates | todo | | |
+| 6 | Progress updates | done | 2026-10-20 | Employee Updates page (write, AI preview, send; send without plain text when the AI is offline), owner Updates inbox with unread badge, signed previews. See "Phase 6" below. |
 | 7 | Realtime status and alerts | todo | | |
 | 8 | Desktop agent core | todo | | |
 | 9 | Face scan, idle detection and verification | todo | | |
@@ -302,6 +302,56 @@ Update this at the end of every phase (the `/phase` command does it).
 - Tasks of a project are ordered by `created_at`, set by the app (1 ms apart inside the create transaction), because the database `now()` is the same for the whole transaction.
 - No new dependencies.
 
+## Phase 6 — Progress updates (done 2026-10-20)
+**Built**
+- Migrations `20261019230117_progress_updates` and `20261019233000_progress_updates_preview_mac`:
+  - `progress_updates`: employee_id, task_id?, text_technical, text_plain?, blockers text[], preview_mac? (unique), created_at, read_by_owner_at?.
+- Business rules decided with the user (2026-10-20):
+  1. What is saved is exactly the AI preview the employee saw; it cannot be edited. To change it, the employee edits the technical text and previews again.
+  2. AI offline (or failing): the employee can send the technical text only. The owner sees "Plain version not available (the AI was offline)" and the original directly.
+  3. Read state: a "Mark as read" button per update, plus "Mark all as read". Opening the original changes nothing.
+- Signed preview (`lib/preview-token.ts`):
+  - HMAC-SHA256 over `['v1', userId, expiry, technical text, plain, blockers]`, valid 60 min.
+  - The key is derived with HKDF from `CODE_HASH_SECRET` (label `lk:progress-update-preview:v1`), so no new env key.
+  - A changed text, plain text, blocker list, another employee or an old preview gives 400 `PREVIEW_MISMATCH`.
+  - The MAC is stored unique: sending the same preview twice saves one update.
+- LLM output is cleaned before signing (`stripUnsafeChars`): control and bidi characters, invisible marks (U+200B/E/F, U+061C, U+2028/9, BOM, U+FFF9-B) and lone surrogates are dropped. ZWJ/ZWNJ stay (Hindi script, emoji). An answer that is empty afterwards is 502 `LLM_BAD_OUTPUT`.
+- API (routes → services → repositories):
+  - Employee: `POST /updates/preview` (P3, same AI rate limit), `POST /updates` (201), `GET /updates/mine`.
+  - Owner: `GET /updates` (filters employeeId, unread=true; keyset paging with `cursor`, newest first), `GET /updates/unread-count`, `PATCH /updates/:id/read` (idempotent, keeps the first read time), `POST /updates/read-all {upTo, employeeId?}` (only up to the newest update on screen, so newer ones stay unread).
+  - A linked task must be assigned to the employee now (404 otherwise). After a reassign the employee no longer sees that task's title on their old update; the owner still does.
+  - Paging cursors are checked against what the caller may see (an employee cannot page from another employee's update id), not against the unread filter.
+  - 30 updates per employee per 15 min (counted before any await).
+  - Event `update:sent` with ids only. Update text is never logged (tested).
+  - `POST /ai/translate-update` is now owner only; employees use the signed `/updates/preview`.
+- Web:
+  - **Employee Updates page** (`/me/updates`):
+    - Text box, optional task, "Preview plain version" shows "What the owner will read" with blockers highlighted, then Send.
+    - Editing the text drops the preview. A refused (old) preview shows the Preview button again. Fields are locked while sending.
+    - AI offline or the preview failed: a notice and "Send without plain version".
+    - Past updates with Read/Unread and "Show what I wrote".
+    - Logic in a pure reducer, `updateDraft.ts`.
+  - **Owner Updates inbox** (`/owner/updates`):
+    - Unread count in the title and as a badge in the menu and the phone tab bar (Overview, Tasks, Updates, Employees, More).
+    - Filters: employee (also `?employeeId=`) and Unread only. "Show older updates" pages back.
+    - Each card: name, time, linked task with its status, "AI summary in plain words", blockers as amber "Blocker:" lines, "Show original (technical)" (closed), Mark as read.
+  - Overview: "Unread updates" count and Recent updates. Employee page: an Updates section with "See all updates".
+  - Counts and lists refresh every 30 s (live with Socket.IO in Phase 7).
+- Tests: 257 server in 27 files (new: `updates.test.ts` 16, `preview-token.test.ts` 7; RBAC lists extended), 49 shared, 84 web (new: `updateDraft` 8), 1 agent. Playwright 20 tests (4 new in `e2e/updates.spec.ts`, desktop and phone): preview with a blocker → send → owner sees plain text with the original collapsed → Mark as read lowers the count → employee sees Read; and with the AI stopped, send without a plain version → owner sees the note and the original. The fake Ollama returns a blocker when the update says "waiting".
+- Reviews:
+  - security-reviewer: no Critical, High or Medium. Seven Low:
+    - Fixed: L2 (HKDF key instead of a keyed hash), L3 (a preview is saved once), L4 (rate limit counted before any await), L5 (more invisible characters stripped), L6 (`/ai/translate-update` owner only), L7 (paging an unread inbox after Mark as read).
+    - L1 partly: the plain text is labelled "AI summary". An employee can still steer the AI wording through their own text; the original is always one tap away.
+  - code-reviewer: the Must-fix (stuck after an expired preview) and all Should-fix items are fixed; also separate query keys, the unread error on Overview, a simpler mark-read.
+
+**Deviations from the plan**
+- New beyond ARCHITECTURE §4: `progress_updates.blockers`, `preview_mac`, and `text_plain` is nullable.
+- Endpoints beyond ARCHITECTURE §5: `/updates/preview`, `/updates/mine`, `/updates/unread-count`, `/updates/read-all`.
+- `/ai/translate-update` changed from employee+owner to owner only (security review L6).
+- The More page has no Updates link: Updates is already in the phone tab bar. Phase 7 reshuffles the tabs when Live and Alerts arrive.
+- If the AI rate limit is hit (429), the employee is also offered "Send without plain version" (`isAiFailure` counts 429 as the AI not helping).
+- No new dependencies.
+
 ## Decisions
 (Record decisions made with the client, e.g. answers to PRD open questions.)
 Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The ones that affect the build:
@@ -330,13 +380,13 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [ ] Phase 0: open http://localhost:5173 after `pnpm dev`. The page shows Server: OK and Database: OK. Then run `docker compose stop db`; within 10 s it should show Database: Down with the Docker hint. Run `docker compose start db` afterwards.
 - [ ] Phase 0: open `.env` yourself and note OWNER_PASSWORD (generated; used by the Phase 1 seed). Never share `.env`.
 - [ ] Phase 0: create the private GitHub/GitLab repo and `git push -u origin main`.
-- [x] Before Phase 1: get the client's answers to docs/PRD.md section 5 (at least 1, 3, 5, 11-18) and write them under Decisions.
+- [ ] Before Phase 1: get the client's answers to docs/PRD.md section 5 (at least 1, 3, 5, 11-18) and write them under Decisions.
 - [ ] Phase 1: put your real OWNER_EMAIL and a strong OWNER_PASSWORD (10+ chars, not common, must not contain the email name) in `.env`, THEN run `pnpm db:seed` twice. The second run must say "Owner account already exists". Seed never changes the owner later, so get the email right first.
 - [ ] Phase 1: by hand with curl (README "Trying the API with curl"): a wrong code, an expired code (wait 10 min), a revoked code and a reused code all return the same "This code is invalid or has expired" message; complete a registration and log in as that employee; `GET /api/v1/employees` with the employee token returns 403.
-- [x] Phase 1: decide PRD Q13 (profile photo) vs CLAUDE.md rule 1 before Phase 9. Decided: store one profile photo.
-- [x] Q13 follow-up: CLAUDE.md rule 1, ARCHITECTURE, ONBOARDING_FLOW, BUILD_PLAN Phase 9, security-reviewer and the consent text updated for the profile-photo exception (2026-10-18).
+- [ ] Phase 1: decide PRD Q13 (profile photo) vs CLAUDE.md rule 1 before Phase 9. Decided: store one profile photo.
+- [ ] Q13 follow-up: CLAUDE.md rule 1, ARCHITECTURE, ONBOARDING_FLOW, BUILD_PLAN Phase 9, security-reviewer and the consent text updated for the profile-photo exception (2026-10-18).
 - [ ] Send the client the revised consent text v2026-10-v2 (`packages/shared/src/schemas/consent.ts`, new profile-photo paragraph) and get approval; the paper consent form should say the same.
-- [x] Phase 1: send the client the draft consent text (`packages/shared/src/schemas/consent.ts`) for approval (PRD Q6). Sent 2026-10-18.
+- [ ] Phase 1: send the client the draft consent text (`packages/shared/src/schemas/consent.ts`) for approval (PRD Q6). Sent 2026-10-18.
 - [ ] Phase 2: with `pnpm dev` running, use the README "Sessions and hours" curl commands as a registered employee: start twice (same id), stop, start again (new id), then `reports/hours/today`, and check that the totals match the time on your watch.
 - [ ] Phase 2: leave a session open past midnight IST (start around 23:50, check after 00:10). `reports/hours?month=...` must show the time split between the two dates, and `reports/hours/today` must count only the time after midnight.
 - [ ] Phase 2: as the owner, `reports/hours?userId=<employee id>` works; with the employee token and another employee's id you get 403.
@@ -349,7 +399,7 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [ ] Phase 3 [LEGAL]: the wizard still shows the draft consent text v2026-10-v2 (`packages/shared/src/schemas/consent.ts`). Replace it with the approved wording before real use.
 - [ ] Phase 3: with the Docker db running, `pnpm test:e2e` should pass. Chromium is already installed on this laptop; on another machine run `pnpm --filter web exec playwright install chromium` once first.
 - [ ] Phase 4: read `llm-eval-results/qwen3.5-4b.md` (and the 8B report) with the owner and judge whether tasks and plain text make sense; run `pnpm llm:eval -- --model qwen3.5:4b --language hinglish` too and let a Hinglish speaker judge it. Write the verdict under Phase 4 above.
-- [x] Phase 4: with `pnpm dev` running, quit Ollama and call the AI endpoints (README "AI assistant"). Done by Claude on 2026-10-19: with Ollama running all four answered (health `gpuPercent: 100`); with Ollama quit, breakdown, translate-task and translate-update gave 503 `LLM_UNAVAILABLE` in 0.2 s, health said `down`, and `/employees` and `/job-roles` still worked; after restarting Ollama the next call worked with no server restart (11 s cold load).
+- [ ] Phase 4: with `pnpm dev` running, quit Ollama and call the AI endpoints (README "AI assistant"). Done by Claude on 2026-10-19: with Ollama running all four answered (health `gpuPercent: 100`); with Ollama quit, breakdown, translate-task and translate-update gave 503 `LLM_UNAVAILABLE` in 0.2 s, health said `down`, and `/employees` and `/job-roles` still worked; after restarting Ollama the next call worked with no server restart (11 s cold load).
 - [ ] Phase 4: optional, `pnpm env:setup --add-missing` to add `OLLAMA_TIMEOUT_MS` and `PLAIN_LANGUAGE` to `.env` (the defaults apply without them).
 - [ ] Phase 5 [TEST]: collect 3-5 REAL project descriptions from the owner. With `pnpm dev` and Ollama running, try each one:
   - Projects → New project → Generate. Check the summary, the tasks and the roles.
@@ -360,5 +410,8 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
   Add any missing job roles. There is no screen for that yet, so use `POST /api/v1/job-roles` (README "Trying the API with curl"), or ask me to add a page.
 - [ ] Phase 5: quit Ollama and repeat once by hand: "Write it by hand" for a project, and a Direct task with "Write it myself". Both must reach the employee.
 - [ ] Phase 5: open Projects and Tasks on your phone through the tunnel (see Phase 3). Check the board's status picker and the Assign modal.
+- [ ] Phase 6 [TEST]: with `pnpm dev` and Ollama running, write 3-5 REAL technical updates as a test employee (Updates → Preview plain version → Send), some mentioning something you are waiting for. As the owner (Updates), check with the owner that the plain version makes sense and that blockers show up. Try one in Hinglish too.
+- [ ] Phase 6: quit Ollama, send an update with "Send without plain version", and check the owner sees the note and the original. Start Ollama again.
+- [ ] Phase 6: open Updates on your phone through the tunnel (see Phase 3): badge in the tab bar, Show original, Mark as read.
 - [ ] Phase 11 / on-site: on the client's 4 GB RTX 3050, pull qwen3.5:4b, run the eval and check `ollama ps` says 100% GPU. If not, try `ollama pull qwen3.5:2b` (or `OLLAMA_NUM_CTX=3072`) and re-run. Record the final model (PRD Q21).
 - [ ] Phase 11: behind Cloudflare Tunnel, set `TRUST_PROXY=true` and use the real client IP (CF-Connecting-IP); otherwise every request looks like one IP and the per-IP limits act globally.

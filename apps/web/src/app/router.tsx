@@ -9,6 +9,7 @@ import { MyDayPage } from '../pages/employee/MyDayPage';
 import { MyHoursPage } from '../pages/employee/MyHoursPage';
 import { MyTasksPage } from '../pages/employee/MyTasksPage';
 import { ProfilePage } from '../pages/employee/ProfilePage';
+import { UpdatesPage as MyUpdatesPage } from '../pages/employee/UpdatesPage';
 import { HealthPage } from '../pages/HealthPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { EmployeeDetailPage } from '../pages/owner/EmployeeDetailPage';
@@ -20,6 +21,7 @@ import { NewProjectPage } from '../pages/owner/projects/NewProjectPage';
 import { ProjectDetailPage } from '../pages/owner/projects/ProjectDetailPage';
 import { ProjectsPage } from '../pages/owner/projects/ProjectsPage';
 import { TasksPage } from '../pages/owner/TasksPage';
+import { UpdatesPage } from '../pages/owner/UpdatesPage';
 import { ForgotPasswordPage } from '../pages/public/ForgotPasswordPage';
 import { LoginPage } from '../pages/public/LoginPage';
 import { RegisterPage } from '../pages/register/RegisterPage';
@@ -57,6 +59,7 @@ export const router = createBrowserRouter([
           { path: 'projects/new', element: <NewProjectPage /> },
           { path: 'projects/:id', element: <ProjectDetailPage /> },
           { path: 'tasks', element: <TasksPage /> },
+          { path: 'updates', element: <UpdatesPage /> },
           { path: 'more', element: <MorePage /> },
         ],
       },
@@ -71,6 +74,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <MyDayPage /> },
           { path: 'tasks', element: <MyTasksPage /> },
+          { path: 'updates', element: <MyUpdatesPage /> },
           { path: 'hours', element: <MyHoursPage /> },
           { path: 'profile', element: <ProfilePage /> },
         ],

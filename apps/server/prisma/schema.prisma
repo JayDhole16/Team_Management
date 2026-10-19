@@ -116,6 +116,7 @@ model User {
   tasksAssigned   Task[]            @relation("TaskAssignee")
   tasksCreated    Task[]            @relation("TaskCreatedBy")
   taskEvents      TaskStatusEvent[]
+  progressUpdates ProgressUpdate[]
 
   @@index([role, status])
   @@map("users")
@@ -325,6 +326,7 @@ model Task {
   assignee  User?             @relation("TaskAssignee", fields: [assigneeId], references: [id])
   createdBy User              @relation("TaskCreatedBy", fields: [createdById], references: [id])
   events    TaskStatusEvent[]
+  updates   ProgressUpdate[]
 
   @@index([assigneeId, status])
   @@index([projectId])
@@ -348,4 +350,29 @@ model TaskStatusEvent {
 
   @@index([taskId, at])
   @@map("task_status_events")
+}
+
+/// An employee's progress update (PRD E-4) and its plain-language version for the owner (O-10).
+model ProgressUpdate {
+  id            String    @id @default(uuid()) @db.Uuid
+  employeeId    String    @map("employee_id") @db.Uuid
+  /// One of the employee's own tasks at the time of sending.
+  taskId        String?   @map("task_id") @db.Uuid
+  textTechnical String    @map("text_technical")
+  /// The AI preview the employee saw (P3). Null when it was sent while the AI was offline.
+  textPlain     String?   @map("text_plain")
+  /// Blockers found by P3, shown to the owner as highlighted lines.
+  blockers      String[]  @default([])
+  /// MAC of the preview token. Unique, so sending the same preview twice saves one update.
+  previewMac    String?   @unique @map("preview_mac")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  readByOwnerAt DateTime? @map("read_by_owner_at")
+
+  employee User  @relation(fields: [employeeId], references: [id])
+  task     Task? @relation(fields: [taskId], references: [id])
+
+  @@index([readByOwnerAt, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([createdAt])
+  @@map("progress_updates")
 }

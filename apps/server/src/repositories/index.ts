@@ -3,6 +3,7 @@ import { createAccessCodeRepository } from './access-code.repository';
 import { createAuditRepository } from './audit.repository';
 import { createConsentRepository } from './consent.repository';
 import { createJobRoleRepository } from './job-role.repository';
+import { createProgressUpdateRepository } from './progress-update.repository';
 import { createProjectRepository } from './project.repository';
 import { createHeartbeatRepository } from './heartbeat.repository';
 import { createRefreshTokenRepository } from './refresh-token.repository';
@@ -27,6 +28,7 @@ export function createRepos(db: Db) {
     sessionGaps: createSessionGapRepository(db),
     projects: createProjectRepository(db),
     tasks: createTaskRepository(db),
+    updates: createProgressUpdateRepository(db),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;

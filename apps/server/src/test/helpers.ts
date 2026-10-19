@@ -78,11 +78,13 @@ export async function createHarness(options: HarnessOptions = {}) {
     alerts: [] as AppEvents['security:alert'][],
     taskAssigned: [] as AppEvents['task:assigned'][],
     taskStatus: [] as AppEvents['task:status-changed'][],
+    updates: [] as AppEvents['update:sent'][],
   };
   bus.on('employee:registered', (e) => events.registered.push(e));
   bus.on('security:alert', (e) => events.alerts.push(e));
   bus.on('task:assigned', (e) => events.taskAssigned.push(e));
   bus.on('task:status-changed', (e) => events.taskStatus.push(e));
+  bus.on('update:sent', (e) => events.updates.push(e));
   const logs: string[] = [];
   const llm = options.llm ?? mockLlm();
 

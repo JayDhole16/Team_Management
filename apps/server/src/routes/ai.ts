@@ -21,15 +21,12 @@ export function registerAiRoutes(app: FastifyInstance, ctx: ServiceContext) {
     return { data: await translateTask(ctx, currentUser(request).id, body, request.log) };
   });
 
-  // Employees preview the plain version of their update before sending it (PRD E-4).
-  app.post(
-    '/api/v1/ai/translate-update',
-    { config: { auth: ['EMPLOYEE', 'OWNER'] } },
-    async (request) => {
-      const body = TranslateUpdateBodySchema.parse(request.body);
-      return { data: await translateUpdate(ctx, currentUser(request).id, body, request.log) };
-    },
-  );
+  // Owner only. Employees preview their update through POST /updates/preview, which signs the
+  // result so exactly that version is saved (PRD E-4, decided 2026-10-20).
+  app.post('/api/v1/ai/translate-update', owner, async (request) => {
+    const body = TranslateUpdateBodySchema.parse(request.body);
+    return { data: await translateUpdate(ctx, currentUser(request).id, body, request.log) };
+  });
 
   // Always 200, so a page can show "AI offline" instead of an error.
   app.get('/api/v1/ai/health', { config: { auth: ['OWNER', 'EMPLOYEE'] } }, async () => {

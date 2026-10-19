@@ -4,9 +4,11 @@ import type {
   Employee,
   Me,
   MyTask,
+  MyUpdate,
   Project,
   Task,
   TaskStatusCounts,
+  Update,
   WorkSession,
 } from '@lk/shared';
 import type {
@@ -16,6 +18,7 @@ import type {
   WorkSession as WorkSessionRow,
 } from '../generated/prisma/client';
 import { dbDateToString } from '../lib/clock';
+import type { ProgressUpdateRow } from '../repositories/progress-update.repository';
 import type { TaskRow } from '../repositories/task.repository';
 
 // Explicit field lists: password hashes, code hashes and face templates can never leak
@@ -138,5 +141,30 @@ export function toProject(project: ProjectRow, counts: TaskStatusCounts): Projec
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
     counts,
+  };
+}
+
+/** The employee's own update. A task that was moved to someone else is not named any more. */
+export function toMyUpdate(update: ProgressUpdateRow): MyUpdate {
+  const ownTask = update.task && update.task.assigneeId === update.employeeId ? update.task : null;
+  return {
+    id: update.id,
+    task: ownTask ? { id: ownTask.id, title: ownTask.title } : null,
+    textTechnical: update.textTechnical,
+    textPlain: update.textPlain,
+    blockers: update.blockers,
+    createdAt: update.createdAt.toISOString(),
+    readByOwnerAt: update.readByOwnerAt?.toISOString() ?? null,
+  };
+}
+
+export function toUpdate(update: ProgressUpdateRow): Update {
+  return {
+    ...toMyUpdate(update),
+    employeeId: update.employeeId,
+    employeeName: update.employee.name,
+    task: update.task
+      ? { id: update.task.id, title: update.task.title, status: update.task.status }
+      : null,
   };
 }
