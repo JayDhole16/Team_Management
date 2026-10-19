@@ -55,3 +55,22 @@ describe('parseEnv', () => {
     expect(message).not.toContain('tiny-secret');
   });
 });
+
+describe('LLM settings', () => {
+  it('defaults to a 4B model, a 4096 context and English plain language (PRD Q8)', () => {
+    expect(parseEnv(base)).toMatchObject({
+      OLLAMA_BASE_URL: 'http://localhost:11434',
+      OLLAMA_MODEL: 'qwen3.5:4b',
+      OLLAMA_NUM_CTX: 4096,
+      OLLAMA_TIMEOUT_MS: 120_000,
+      PLAIN_LANGUAGE: 'english',
+    });
+  });
+
+  it('accepts hinglish and rejects bad values by name', () => {
+    expect(parseEnv({ ...base, PLAIN_LANGUAGE: 'hinglish' }).PLAIN_LANGUAGE).toBe('hinglish');
+    expect(() => parseEnv({ ...base, PLAIN_LANGUAGE: 'french' })).toThrow(/PLAIN_LANGUAGE/);
+    expect(() => parseEnv({ ...base, OLLAMA_NUM_CTX: '100' })).toThrow(/OLLAMA_NUM_CTX/);
+    expect(() => parseEnv({ ...base, OLLAMA_BASE_URL: 'not a url' })).toThrow(/OLLAMA_BASE_URL/);
+  });
+});

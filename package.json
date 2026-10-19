@@ -16,7 +16,8 @@
     "test:e2e": "pnpm --filter web test:e2e",
     "db:migrate": "pnpm --filter server db:migrate",
     "db:seed": "pnpm --filter server db:seed",
-    "env:setup": "node scripts/setup-env.mjs"
+    "env:setup": "node scripts/setup-env.mjs",
+    "llm:eval": "pnpm --filter server llm:eval"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

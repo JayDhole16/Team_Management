@@ -82,6 +82,25 @@ curl -s "$API/reports/hours?userId=<employee id>&month=2026-10" -H "authorizatio
 
 Once a session has had a heartbeat, it closes itself 3 minutes (`SESSION_AUTOCLOSE_AFTER_SEC`) after the last one. A session with no heartbeat at all closes after 12 hours (`SESSION_NO_HEARTBEAT_MAX_HOURS`), and the report flags that day.
 
+### AI assistant (Phase 4)
+
+Needs Ollama running with `OLLAMA_MODEL` pulled (see "Local LLM" below). With Ollama stopped, every call returns a clean 503 (`LLM_UNAVAILABLE`), and tasks can still be written by hand.
+
+```bash
+curl -s $API/ai/health -H "authorization: Bearer $OWNER"
+curl -s -X POST $API/ai/breakdown -H "authorization: Bearer $OWNER" -H 'content-type: application/json'   -d '{"brief":"Instagram ke liye 10 reels banane hain, saath me 3 logo options bhi chahiye."}'
+curl -s -X POST $API/ai/translate-task -H "authorization: Bearer $OWNER" -H 'content-type: application/json'   -d '{"text":"Login page pe forgot password kaam nahi kar raha, theek kar do.","jobRoleId":"<job role id>"}'
+curl -s -X POST $API/ai/translate-update -H "authorization: Bearer $EMP" -H 'content-type: application/json'   -d '{"text":"Dockerized the API. Blocked on the SSL certificate from the client DNS."}'
+```
+
+## Local LLM (Ollama)
+
+1. Install Ollama from ollama.com, then pull the model set in `OLLAMA_MODEL` (default `qwen3.5:4b`): `ollama pull qwen3.5:4b`.
+2. After a request, run `ollama ps`: PROCESSOR must say `100% GPU`. If it does not, close GPU-heavy apps or use a smaller model (`qwen3.5:2b`, `llama3.2:3b`).
+3. Run the eval on the samples in docs/llm-eval-samples.md and read the report it writes to `llm-eval-results/`:
+   `pnpm llm:eval -- --model qwen3.5:4b --runs 2` (other flags: `--only B1,U2`, `--out <file.md>`, `--language hinglish`).
+4. Settings in `.env`: `OLLAMA_MODEL`, `OLLAMA_NUM_CTX` (4096), `OLLAMA_TIMEOUT_MS` (120000), `PLAIN_LANGUAGE` (`english`, or `hinglish`). Changing the model needs no code change; restart the server.
+
 ## Commands
 
 | Command | What it does |
@@ -92,6 +111,7 @@ Once a session has had a heartbeat, it closes itself 3 minutes (`SESSION_AUTOCLO
 | `pnpm test:e2e` | Playwright end-to-end tests (needs the Docker db and the Chromium download) |
 | `pnpm --filter server test` | Tests for one package |
 | `pnpm db:migrate` / `pnpm db:seed` | Prisma migrations / seed data |
+| `pnpm llm:eval -- --model <name>` | Runs the LLM eval samples against local Ollama and writes a report |
 | `pnpm format` | Format all files with Prettier |
 
 ## Layout

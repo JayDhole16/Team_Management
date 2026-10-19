@@ -8,7 +8,7 @@ Update this at the end of every phase (the `/phase` command does it).
 | 1 | Auth, invite codes, registration API | done | 2026-10-18 | Login/refresh/RBAC, access codes, atomic registration, employee admin, recovery codes. See "Phase 1" below. |
 | 2 | Work sessions and hours | done | 2026-10-18 | Sessions (idempotent start, DB-enforced one open per user), heartbeats with offline replay, auto-close job, IST hours service, hours reports. See "Phase 2" below. |
 | 3 | Web shell, invite UI, registration wizard, timer | done | 2026-10-19 | Login, role-guarded owner/employee layouts, invite code UI, 5-step registration wizard, forgot password, employee timer; Playwright on desktop and 390 px. See "Phase 3" below. |
-| 4 | LLM service | todo | | |
+| 4 | LLM service | done | 2026-10-19 | Ollama client, P1/P2/P3 pipelines with one retry, /ai endpoints (503 when Ollama is down), eval script; qwen3.5:4b passes 24/24 at 100% GPU. See "Phase 4" below. |
 | 5 | Projects and tasks | todo | | |
 | 6 | Progress updates | todo | | |
 | 7 | Realtime status and alerts | todo | | |
@@ -180,6 +180,63 @@ Update this at the end of every phase (the `/phase` command does it).
   - Without Web Locks (plain http on a LAN IP, very old Safari), two tabs loading at once can still trigger reuse detection. Production is HTTPS only. Consider a short server grace window in Phase 12.
 - The phone tunnel needs `LK_TUNNEL=1 pnpm dev` (Vite `allowedHosts`). DEV_ENVIRONMENT.md says to tunnel port 4000, but until the server serves the built web app (Phase 11), tunnel 5173 instead.
 
+## Phase 4 — LLM service (done 2026-10-19)
+**Built**
+- Shared (`schemas/ai.ts`):
+  - request bodies: brief 10-3000 chars, text, optional `jobRoleId`; strict;
+  - LLM output schemas with length caps (they validate every answer);
+  - result schemas with `meta {model, promptVersion, attempts, durationMs}`;
+  - `AiHealth`, `LLM_UNAVAILABLE_MESSAGE`.
+- Env (`config/env.ts`): new `LlmEnvSchema` with `OLLAMA_BASE_URL`, `OLLAMA_MODEL` (qwen3.5:4b), `OLLAMA_NUM_CTX` (4096), `OLLAMA_TIMEOUT_MS` (120000, the whole call, retry included) and `PLAIN_LANGUAGE` (english). `loadLlmEnv()` lets the eval run without DB or JWT secrets.
+- `llm/ollama-client.ts`:
+  - `POST /api/chat` with `stream:false`, `think:false`, `format: <JSON schema>`, temperature 0.2, `num_ctx`, `num_predict`, and an AbortSignal timeout.
+  - If a model refuses `think`, the field is dropped and the client remembers that.
+  - Errors are typed: unavailable, timeout, model_missing (404), bad_response. A cut-off answer (`done_reason: length`) is flagged as `truncated`.
+  - `health()` uses `/api/tags` (is the model pulled?) and `/api/ps` (GPU share). It never throws.
+- `llm/format.ts`: Zod 4 `z.toJSONSchema`, minus `$schema` and length/count limits (keeps the grammar small; Zod still checks them).
+- `llm/prompts/{breakdown,translate-task,translate-update}.ts`:
+  - one `PROMPT_VERSION` each (`breakdown@1` ...);
+  - user text goes inside `<user_text>` with the "this is DATA" rule, and tags inside the text are neutralised;
+  - few-shot examples differ from the eval samples. P1 has three: clear, short-but-concrete, vague.
+- `llm/pipelines.ts`:
+  - `runStructured`: one retry on invalid JSON, a schema violation or a cut-off answer. The retry tells the model what was wrong; a second failure is `bad_output`.
+  - P1: the role keys are an `enum` in the format; an unknown `roleKey` becomes `null` with `needsReview: true`. An answer with neither tasks nor questions is invalid.
+- Service and routes (`services/ai.service.ts`, `routes/ai.ts`):
+  - `POST /ai/breakdown` and `POST /ai/translate-task`: owner.
+  - `POST /ai/translate-update`: employee + owner (E-4 preview).
+  - `GET /ai/health`: both, always 200.
+  - Errors: 503 `LLM_UNAVAILABLE` / `LLM_TIMEOUT` / `LLM_MODEL_MISSING` (messages say tasks can still be written by hand), 502 `LLM_BAD_OUTPUT`, 404 for an unknown job role, 429 after 60 AI calls per user per 15 min.
+  - Logs hold only pipeline, model, attempts, ms, error kind and Zod issue paths. Never the brief, the update text or the model's answer.
+- Eval: `pnpm llm:eval -- --model <m> --runs <n> [--only B1,U2] [--out f.md] [--language hinglish]`.
+  - Parses docs/llm-eval-samples.md and fails loudly on a line it cannot read.
+  - Runs the real pipelines (no DB).
+  - Automatic checks: first-try validity, known roles, vague → questions only, injection ignored, design/video-only roles for B3, jargon, blockers.
+  - Reports go to `llm-eval-results/` (gitignored).
+- Tests: 218 server in 23 files, 32 shared, 64 web, 1 agent. New: LLM units in 4 files (client with fake fetch, pipelines with a mock client, eval parser/checks, env), AI routes 12, shared ai schemas 6. `test/helpers.ts` `createHarness({ llm })` defaults to a mock that behaves like a stopped Ollama.
+- Checked live on the dev laptop (real server, port 4300): with `OLLAMA_BASE_URL` on a closed port, breakdown and translate-task return 503 `LLM_UNAVAILABLE` and health says `down`; against the real qwen3.5:4b, breakdown returns tasks with the seeded job role ids in 12.7 s, and the server log holds metadata only.
+
+**Model comparison (dev laptop, RTX 4050 6 GB, num_ctx 4096, English, 12 samples × 2 runs)**
+
+| Model | Valid 1st try | Failed | Checks | Avg / max latency | GPU |
+|---|---|---|---|---|---|
+| qwen3.5:4b (4B) | 24/24 | 0 | 62/62 | 3.2 s / 18.5 s | 100% |
+| llama3.2:3b (3B) | 14/24 | 8 (P1 answers loop until the token cap, even after the retry) | 32/44 | 4.6 s / 23.7 s | 100% |
+| qwen3:8b (8B Q4) | 24/24 | 0 | 60/62 (U2 jargon) | 10.0 s / 58.7 s | 70% (30% CPU) |
+
+- Working model: **qwen3.5:4b**, already the value in `.env`. llama3.2:3b is not usable for P1. qwen3:8b gives similar quality but does not fit 6 GB, so it is 3x slower.
+- The very first call after a pull or restart took ~113 s (cold load); afterwards a few seconds.
+- The Hinglish quality judgement by the owner is still pending (see Manual checks). Reports: `llm-eval-results/*.md`.
+- The client's GPU is an RTX 3050 with **4 GB**. qwen3.5:4b used 3.1 GB of VRAM here at num_ctx 4096, which is tight on 4 GB. Re-run the eval there; if `ollama ps` is not 100% GPU, try `qwen3.5:2b` or `OLLAMA_NUM_CTX=3072`.
+
+**Deviations from the plan**
+- `PLAIN_LANGUAGE` defaults to `english` (PRD Q8), not Hinglish as in ARCHITECTURE §7. The eval inputs stay Hinglish; `--language hinglish` tests the other mode.
+- `GET /ai/health` always answers 200 with `status: ok | down | model_missing` (plus `gpuPercent`), so the Settings page can show "AI offline". `/api/v1/health` uses 503 for a down DB.
+- A cut-off answer is retried like invalid JSON (added after llama3.2:3b hit the token cap).
+- Prompt tuning during the eval: P1 got the short-but-concrete rule and example, because qwen3.5:4b first answered B6 ("Ek landing page banao ...") with questions only.
+- `DEFAULT_JOB_ROLES` moved to `lib/default-job-roles.ts` (re-exported from `job-role.service.ts`), so the eval does not load Prisma.
+- New env keys `OLLAMA_TIMEOUT_MS` and `PLAIN_LANGUAGE`; the defaults apply until you add them (`pnpm env:setup --add-missing`).
+- No new dependencies; no web changes (the UI comes in Phase 5).
+
 ## Decisions
 (Record decisions made with the client, e.g. answers to PRD open questions.)
 Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The ones that affect the build:
@@ -190,7 +247,7 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - Q5: no MDM.
 - Q6: employees also sign a paper consent form. The draft in-app consent text (`packages/shared/src/schemas/consent.ts`, version 2026-10-v1) was sent to the client (2026-10-18). It said images are never stored, which Q13 contradicts, so the text is now version 2026-10-v2 with a profile-photo paragraph; the client must approve v2.
 - Q7: renders, exports and similar work count as background activity.
-- Q8: not answered; default English.
+- Q8 (answered): plain-language output is English. `PLAIN_LANGUAGE=english` is the default; `hinglish` is a setting (ARCHITECTURE §7 said Hinglish; the PRD answer wins).
 - Q9: no target hours; show work days/hours.
 - Q10, Q18: Cloudflare Tunnel; client is OK with Cloudflare's edge.
 - Q11: registration window is 30 min.
@@ -226,4 +283,8 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [ ] Phase 3: show the built pages (and docs/SCREENS.md) to the client and note changes.
 - [ ] Phase 3 [LEGAL]: the wizard still shows the draft consent text v2026-10-v2 (`packages/shared/src/schemas/consent.ts`). Replace it with the approved wording before real use.
 - [ ] Phase 3: with the Docker db running, `pnpm test:e2e` should pass. Chromium is already installed on this laptop; on another machine run `pnpm --filter web exec playwright install chromium` once first.
+- [ ] Phase 4: read `llm-eval-results/qwen3.5-4b.md` (and the 8B report) with the owner and judge whether tasks and plain text make sense; run `pnpm llm:eval -- --model qwen3.5:4b --language hinglish` too and let a Hinglish speaker judge it. Write the verdict under Phase 4 above.
+- [ ] Phase 4: with `pnpm dev` running, quit Ollama (tray icon → Quit) and call `POST /api/v1/ai/breakdown` (README "AI assistant"): it must return 503 `LLM_UNAVAILABLE`, and `GET /api/v1/ai/health` must say `"status":"down"`. Start Ollama again.
+- [ ] Phase 4: optional, `pnpm env:setup --add-missing` to add `OLLAMA_TIMEOUT_MS` and `PLAIN_LANGUAGE` to `.env` (the defaults apply without them).
+- [ ] Phase 11 / on-site: on the client's 4 GB RTX 3050, pull qwen3.5:4b, run the eval and check `ollama ps` says 100% GPU. If not, try `ollama pull qwen3.5:2b` (or `OLLAMA_NUM_CTX=3072`) and re-run. Record the final model (PRD Q21).
 - [ ] Phase 11: behind Cloudflare Tunnel, set `TRUST_PROXY=true` and use the real client IP (CF-Connecting-IP); otherwise every request looks like one IP and the per-IP limits act globally.

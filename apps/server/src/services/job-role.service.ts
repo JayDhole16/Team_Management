@@ -3,15 +3,7 @@ import { AppError } from '../lib/errors';
 import { isUniqueViolation } from '../repositories';
 import type { ServiceContext } from './context';
 
-/** Seeded on every `pnpm db:seed` (PRD section 1). The owner can add more. */
-export const DEFAULT_JOB_ROLES: readonly { key: string; label: string }[] = [
-  { key: 'editor', label: 'Editor' },
-  { key: 'graphic_designer', label: 'Graphic Designer' },
-  { key: 'frontend_developer', label: 'Frontend Developer' },
-  { key: 'backend_developer', label: 'Backend Developer' },
-  { key: 'ai_developer', label: 'AI Developer' },
-  { key: 'fullstack_developer', label: 'Full-stack Developer' },
-];
+export { DEFAULT_JOB_ROLES } from '../lib/default-job-roles';
 
 export function listJobRoles(ctx: ServiceContext): Promise<JobRole[]> {
   return ctx.data.repos.jobRoles.list();

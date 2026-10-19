@@ -54,6 +54,8 @@ describe('RBAC on every route', () => {
         'POST /api/v1/employees/:id/deactivate',
         'POST /api/v1/employees/:id/reactivate',
         'POST /api/v1/job-roles',
+        'POST /api/v1/ai/breakdown',
+        'POST /api/v1/ai/translate-task',
       ]),
     );
   });

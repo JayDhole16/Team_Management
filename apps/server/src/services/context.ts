@@ -2,12 +2,15 @@ import type { Env } from '../config/env';
 import type { Clock } from '../lib/clock';
 import type { EventBus } from '../lib/events';
 import { FailureLimiter } from '../lib/rate-limiter';
+import type { LlmClient } from '../llm/types';
 import type { DataAccess } from '../repositories';
 
 export const RATE_LIMIT_WINDOW_MS = 15 * 60_000;
 export const LOGIN_FAILURES_PER_IP = 10;
 export const LOGIN_FAILURES_PER_ACCOUNT = 10;
 export const CODE_FAILURES_PER_IP = 5;
+/** AI calls per user in the window. The GPU is shared, so one user cannot queue it up. */
+export const AI_CALLS_PER_USER = 60;
 
 export interface Limiters {
   /** Failed logins per IP. */
@@ -19,6 +22,8 @@ export interface Limiters {
   /** Failed password-reset / face-rescan codes per IP. No global cap, so floods of
    *  wrong invite codes cannot block recovery for everyone. */
   recovery: FailureLimiter;
+  /** Every /ai/* call per user (counted as an attempt whether it succeeds or not). */
+  ai: FailureLimiter;
 }
 
 export function createLimiters(env: Pick<Env, 'CLAIM_GLOBAL_FAILURE_CAP'>, now: Clock): Limiters {
@@ -29,6 +34,7 @@ export function createLimiters(env: Pick<Env, 'CLAIM_GLOBAL_FAILURE_CAP'>, now: 
     loginAccount: perKey(LOGIN_FAILURES_PER_ACCOUNT),
     claim: perKey(CODE_FAILURES_PER_IP, env.CLAIM_GLOBAL_FAILURE_CAP),
     recovery: perKey(CODE_FAILURES_PER_IP),
+    ai: perKey(AI_CALLS_PER_USER),
   };
 }
 
@@ -39,4 +45,5 @@ export interface ServiceContext {
   clock: Clock;
   bus: EventBus;
   limiters: Limiters;
+  llm: LlmClient;
 }

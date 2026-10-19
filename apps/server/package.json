@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "postinstall": "prisma generate",
-    "e2e:serve": "tsx src/test/e2e-server.ts"
+    "e2e:serve": "tsx src/test/e2e-server.ts",
+    "llm:eval": "tsx ../../scripts/llm-eval.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

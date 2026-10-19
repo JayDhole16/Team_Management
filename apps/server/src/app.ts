@@ -5,9 +5,12 @@ import type { Env } from './config/env';
 import { systemClock, type Clock } from './lib/clock';
 import { AppError } from './lib/errors';
 import { createEventBus, type EventBus } from './lib/events';
+import { createOllamaClient } from './llm/ollama-client';
+import type { LlmClient } from './llm/types';
 import { registerAuth } from './plugins/auth';
 import type { DataAccess } from './repositories';
 import type { HealthRepository } from './repositories/health.repository';
+import { registerAiRoutes } from './routes/ai';
 import { registerAuthRoutes } from './routes/auth';
 import { registerCodeRoutes } from './routes/codes';
 import { registerEmployeeRoutes } from './routes/employees';
@@ -33,6 +36,8 @@ export interface AppDeps {
   clock?: Clock;
   bus?: EventBus;
   limiters?: Limiters;
+  /** Defaults to the real Ollama client; tests pass a mock. */
+  llm?: LlmClient;
 }
 
 /** Turns Zod issues into one readable line. Never includes the submitted values. */
@@ -52,6 +57,7 @@ export function buildApp(deps: AppDeps, options: { logger?: FastifyServerOptions
     clock,
     bus: deps.bus ?? createEventBus(),
     limiters: deps.limiters ?? createLimiters(deps.env, clock),
+    llm: deps.llm ?? createOllamaClient(deps.env, { clock }),
   };
 
   const app = Fastify({ logger: options.logger ?? false, trustProxy: deps.env.TRUST_PROXY });
@@ -105,6 +111,7 @@ export function buildApp(deps: AppDeps, options: { logger?: FastifyServerOptions
   registerMeRoutes(app, ctx);
   registerSessionRoutes(app, ctx);
   registerReportRoutes(app, ctx);
+  registerAiRoutes(app, ctx);
 
   return app;
 }

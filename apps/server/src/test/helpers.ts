@@ -11,6 +11,7 @@ import { createDataAccess, type DataAccess } from '../repositories';
 import { createHealthRepository } from '../repositories/health.repository';
 import { createPrismaClient } from '../repositories/prisma';
 import { runSeed } from '../services/seed.service';
+import { mockLlm } from './mock-llm';
 
 export const OWNER = { email: 'owner@test.local', password: 'Boss-Desk-Lamp-2026!' };
 export const EMPLOYEE_PASSWORD = 'Strong-Employee-Pw-42';
@@ -59,6 +60,8 @@ export interface HarnessOptions {
   /** Replace data access, e.g. to inject a failure inside a transaction. */
   data?: (real: DataAccess) => DataAccess;
   captureLogs?: boolean;
+  /** Defaults to a mock that behaves like a stopped Ollama, so no test needs a real model. */
+  llm?: ReturnType<typeof mockLlm>;
 }
 
 /** Fresh app + empty database + seeded owner and job roles. */
@@ -77,9 +80,10 @@ export async function createHarness(options: HarnessOptions = {}) {
   bus.on('employee:registered', (e) => events.registered.push(e));
   bus.on('security:alert', (e) => events.alerts.push(e));
   const logs: string[] = [];
+  const llm = options.llm ?? mockLlm();
 
   const app = buildApp(
-    { healthRepo: createHealthRepository(db), data, env, clock: clock.now, bus },
+    { healthRepo: createHealthRepository(db), data, env, clock: clock.now, bus, llm: llm.client },
     {
       logger: options.captureLogs
         ? loggerOptions('trace', { write: (line) => void logs.push(line) })
@@ -108,6 +112,7 @@ export async function createHarness(options: HarnessOptions = {}) {
     clock,
     events,
     logs,
+    llm,
     role,
 
     async login(email: string, password: string, ip = '10.0.0.1') {

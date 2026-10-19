@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { PlainLanguageSchema } from '@lk/shared';
 import { z } from 'zod';
 
 const secret = z
@@ -7,7 +8,19 @@ const secret = z
   .min(32, 'must be at least 32 characters (run pnpm env:setup --add-missing)');
 const booleanFlag = z.enum(['true', 'false']).transform((v) => v === 'true');
 
-const EnvSchema = z.object({
+/** Local LLM settings. Exported on its own so scripts/llm-eval.ts can run without DB or JWT secrets. */
+export const LlmEnvSchema = z.object({
+  OLLAMA_BASE_URL: z.url().default('http://localhost:11434'),
+  OLLAMA_MODEL: z.string().trim().min(1).default('qwen3.5:4b'),
+  OLLAMA_NUM_CTX: z.coerce.number().int().min(512).max(32768).default(4096),
+  /** Budget for one pipeline call, the one retry included. */
+  OLLAMA_TIMEOUT_MS: z.coerce.number().int().min(5000).max(600_000).default(120_000),
+  /** Language of owner-facing plain text (PRD Q8: English). */
+  PLAIN_LANGUAGE: PlainLanguageSchema.default('english'),
+});
+export type LlmEnv = z.infer<typeof LlmEnvSchema>;
+
+const EnvSchema = LlmEnvSchema.extend({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   HOST: z.string().min(1).default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
@@ -36,15 +49,19 @@ const EnvSchema = z.object({
 export type Env = z.infer<typeof EnvSchema>;
 
 /** Validates env vars. Error messages name the variable but never echo its value. */
-export function parseEnv(source: Record<string, string | undefined>): Env {
-  const result = EnvSchema.safeParse(source);
+function parseWith<S extends z.ZodType>(schema: S, source: Record<string, string | undefined>) {
+  const result = schema.safeParse(source);
   if (!result.success) {
     const problems = result.error.issues
       .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
       .join('; ');
     throw new Error(`Invalid environment configuration (check .env): ${problems}`);
   }
-  return result.data;
+  return result.data as z.infer<S>;
+}
+
+export function parseEnv(source: Record<string, string | undefined>): Env {
+  return parseWith(EnvSchema, source);
 }
 
 /** Path of the single .env at the repo root. */
@@ -54,4 +71,10 @@ export const ROOT_ENV_PATH = fileURLToPath(new URL('../../../../.env', import.me
 export function loadEnv(): Env {
   if (existsSync(ROOT_ENV_PATH)) process.loadEnvFile(ROOT_ENV_PATH);
   return parseEnv(process.env);
+}
+
+/** Only the LLM settings (for scripts that do not need the database or secrets). */
+export function loadLlmEnv(): LlmEnv {
+  if (existsSync(ROOT_ENV_PATH)) process.loadEnvFile(ROOT_ENV_PATH);
+  return parseWith(LlmEnvSchema, process.env);
 }
