@@ -349,7 +349,7 @@ Update this at the end of every phase (the `/phase` command does it).
 - Endpoints beyond ARCHITECTURE §5: `/updates/preview`, `/updates/mine`, `/updates/unread-count`, `/updates/read-all`.
 - `/ai/translate-update` changed from employee+owner to owner only (security review L6).
 - The More page has no Updates link: Updates is already in the phone tab bar. Phase 7 reshuffles the tabs when Live and Alerts arrive.
-- If the AI rate limit is hit (429), the employee is also offered "Send without plain version" (`isAiFailure` counts 429 as the AI not helping).
+- Confirmed with the user (2026-10-20): "Send without plain version" stays a fallback, never always visible. It appears when the AI is offline, when a preview fails (timeout, model missing, unusable answer), and when the AI rate limit is hit (429).
 - No new dependencies.
 
 ## Decisions
