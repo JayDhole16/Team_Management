@@ -439,6 +439,7 @@ Update this at the end of every phase (the `/phase` command does it).
   - No per-user rate limit on heartbeats/start/stop yet (status refreshes are coalesced); add in Phase 12 with the Phase 5 L2 item.
 - Follow-up after the user's decisions (2026-10-20), migration `20261020105634_alerts_notified` (`alerts.notified`):
   - **Retention:** acknowledged alerts are deleted 6 months after they happened (hourly, with the heartbeat clean-up). Open alerts stay until acknowledged.
+  - **Push lifetime:** an alert push waits up to 24 hours for a device that is off or offline (was 1 hour), and its text carries the alert's time in India, e.g. "Rahul: nobody at the camera (18 Oct, 10:30)".
   - **Quiet idle events:** an idle event beeps, pops up and pushes only when it is happening now: it reached the server within 5 minutes and a work session is open. A late one (agent offline queue) or one outside a session is stored and listed until acknowledged, but quietly, labelled "Reported late by the desktop agent…" or "Reported outside a work session…". The owner's lists refresh through a new socket event `alert:stored`.
 - The real agent (Phase 9) should send AWAY heartbeats while its "Are you there?" prompt is open. An ACTIVE heartbeat after an idle alert shows the employee as Working again.
 

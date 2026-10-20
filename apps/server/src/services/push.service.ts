@@ -85,16 +85,28 @@ export async function unsubscribePush(
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** "18 Oct, 10:30" in India time. */
+const alertTime = (iso: string) =>
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(iso));
+
 /**
  * Idle: the employee's name and the reason. Security: a generic line only (no names or
- * addresses on a lock screen); the details are on the Alerts page.
+ * addresses on a lock screen); the details are on the Alerts page. Both carry the alert's
+ * time, because a phone that was off can get it up to 24 hours later.
  */
 export function alertPushPayload(alert: Alert): PushPayload {
   const kind = SecurityAlertKindSchema.safeParse(alert.securityKind);
   const body =
     alert.kind === 'IDLE'
-      ? describeAlert(alert)
-      : `${capitalize(kind.success ? SECURITY_KIND_LABELS[kind.data] : 'something needs a look')}. Open the dashboard.`;
+      ? `${describeAlert(alert)} (${alertTime(alert.at)})`
+      : `${capitalize(kind.success ? SECURITY_KIND_LABELS[kind.data] : 'something needs a look')} (${alertTime(alert.at)}). Open the dashboard.`;
   return {
     title: alert.kind === 'IDLE' ? 'Idle alert' : 'Security alert',
     body,

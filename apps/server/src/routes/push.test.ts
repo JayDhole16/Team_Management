@@ -91,7 +91,8 @@ describe('push subscriptions and alert pushes', () => {
       endpoint: FCM,
       payload: {
         title: 'Idle alert',
-        body: 'Rahul Sharma: nobody at the camera',
+        // The test clock is 2026-10-18 05:00 UTC = 10:30 in India.
+        body: 'Rahul Sharma: nobody at the camera (18 Oct, 10:30)',
         url: '/owner/alerts',
       },
     });
@@ -119,7 +120,9 @@ describe('push subscriptions and alert pushes', () => {
       (p) => (p.payload as { title: string }).title === 'Security alert',
     )?.payload as { body: string } | undefined;
     // A generic line on the lock screen: no address or name.
-    expect(payload?.body).toBe('Wrong access codes from one address. Open the dashboard.');
+    expect(payload?.body).toBe(
+      'Wrong access codes from one address (18 Oct, 10:30). Open the dashboard.',
+    );
   });
 
   it('refuses endpoints that are not a browser push service', async () => {

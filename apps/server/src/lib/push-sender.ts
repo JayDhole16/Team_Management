@@ -1,6 +1,9 @@
 import webpush from 'web-push';
 import type { Env } from '../config/env';
 
+/** How long the push service keeps an undelivered alert: 24 hours. */
+export const PUSH_TTL_SEC = 24 * 60 * 60;
+
 export interface PushTarget {
   endpoint: string;
   keys: { p256dh: string; auth: string };
@@ -32,8 +35,9 @@ export function createWebPushSender(env: Env): PushSender | null {
       try {
         await webpush.sendNotification(target, payload, {
           vapidDetails: { subject, publicKey, privateKey },
-          // An alert older than an hour is no longer useful on the lock screen.
-          TTL: 3600,
+          // A device that is off gets the alert when it comes back within 24 hours (decided
+          // with the user 2026-10-20); after that the push service drops it.
+          TTL: PUSH_TTL_SEC,
           urgency: 'high',
           timeout: 10_000,
         });
