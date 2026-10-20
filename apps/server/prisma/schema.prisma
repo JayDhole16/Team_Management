@@ -69,6 +69,20 @@ enum TaskSource {
   DIRECT
 }
 
+enum AlertKind {
+  /// A failed idle check reported by the agent (ARCHITECTURE section 5, "idle_events").
+  IDLE
+  /// Code abuse, account lock, token reuse, duplicate face.
+  SECURITY
+}
+
+enum IdleReason {
+  NO_ACTIVITY
+  NO_FACE
+  FACE_MISMATCH
+  CAMERA_UNAVAILABLE
+}
+
 enum CodeStatus {
   ACTIVE
   CLAIMED
@@ -102,21 +116,24 @@ model User {
   updatedAt             DateTime    @updatedAt @map("updated_at")
   deactivatedAt         DateTime?   @map("deactivated_at")
 
-  jobRole         JobRole?          @relation(fields: [jobRoleId], references: [id])
+  jobRole         JobRole?           @relation(fields: [jobRoleId], references: [id])
   devices         Device[]
   refreshTokens   RefreshToken[]
   consentRecords  ConsentRecord[]
-  codesCreated    AccessCode[]      @relation("CodeCreatedBy")
-  codesTargeted   AccessCode[]      @relation("CodeTarget")
-  codesRegistered AccessCode[]      @relation("CodeRegistered")
+  codesCreated    AccessCode[]       @relation("CodeCreatedBy")
+  codesTargeted   AccessCode[]       @relation("CodeTarget")
+  codesRegistered AccessCode[]       @relation("CodeRegistered")
   auditEntries    AuditLog[]
   workSessions    WorkSession[]
   heartbeats      Heartbeat[]
-  projectsCreated Project[]         @relation("ProjectCreatedBy")
-  tasksAssigned   Task[]            @relation("TaskAssignee")
-  tasksCreated    Task[]            @relation("TaskCreatedBy")
+  projectsCreated Project[]          @relation("ProjectCreatedBy")
+  tasksAssigned   Task[]             @relation("TaskAssignee")
+  tasksCreated    Task[]             @relation("TaskCreatedBy")
   taskEvents      TaskStatusEvent[]
   progressUpdates ProgressUpdate[]
+  alerts          Alert[]            @relation("AlertEmployee")
+  alertsAcked     Alert[]            @relation("AlertAckedBy")
+  pushSubs        PushSubscription[]
 
   @@index([role, status])
   @@map("users")
@@ -375,4 +392,51 @@ model ProgressUpdate {
   @@index([employeeId, createdAt])
   @@index([createdAt])
   @@map("progress_updates")
+}
+
+/// Owner alerts (PRD O-8): idle events and security alerts. Stay open until the owner
+/// acknowledges them. Idle events (ARCHITECTURE "idle_events") are the IDLE rows.
+model Alert {
+  id            String      @id @default(uuid()) @db.Uuid
+  kind          AlertKind
+  /// IDLE: the employee. Null for most security alerts.
+  userId        String?     @map("user_id") @db.Uuid
+  idleReason    IdleReason? @map("idle_reason")
+  /// Face match distance (FACE_MISMATCH), when the agent sends it.
+  score         Float?
+  /// SECURITY: e.g. CLAIM_IP_BLOCKED.
+  securityKind  String?     @map("security_kind")
+  /// SECURITY: text written by the server, never user input.
+  message       String?
+  /// When it happened (client time for idle events, clamped).
+  at            DateTime
+  receivedAt    DateTime    @map("received_at")
+  /// The employee dismissed the agent's modal (Phase 9).
+  employeeAckAt DateTime?   @map("employee_ack_at")
+  ownerAckAt    DateTime?   @map("owner_ack_at")
+  ownerAckById  String?     @map("owner_ack_by") @db.Uuid
+
+  user       User? @relation("AlertEmployee", fields: [userId], references: [id])
+  ownerAckBy User? @relation("AlertAckedBy", fields: [ownerAckById], references: [id])
+
+  @@index([ownerAckAt, at])
+  @@index([userId, at])
+  @@index([at])
+  @@map("alerts")
+}
+
+/// Web Push subscription of an owner's browser or phone (PRD O-14).
+model PushSubscription {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

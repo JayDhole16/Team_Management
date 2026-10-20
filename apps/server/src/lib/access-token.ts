@@ -31,12 +31,17 @@ export async function signAccessToken(
   return { token, expiresAt: new Date(exp * 1000) };
 }
 
+export interface VerifiedAccessToken extends AccessTokenClaims {
+  /** When the token stops working (sockets are closed then). */
+  expiresAt: Date;
+}
+
 /** Returns null for any invalid, expired or tampered token. */
 export async function verifyAccessToken(
   token: string,
   secret: string,
   now: Date,
-): Promise<AccessTokenClaims | null> {
+): Promise<VerifiedAccessToken | null> {
   try {
     const { payload } = await jwtVerify(token, key(secret), {
       algorithms: [ALG],
@@ -45,7 +50,8 @@ export async function verifyAccessToken(
     });
     if (typeof payload.sub !== 'string') return null;
     if (payload.role !== 'OWNER' && payload.role !== 'EMPLOYEE') return null;
-    return { sub: payload.sub, role: payload.role };
+    if (typeof payload.exp !== 'number') return null;
+    return { sub: payload.sub, role: payload.role, expiresAt: new Date(payload.exp * 1000) };
   } catch {
     return null;
   }

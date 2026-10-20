@@ -9,7 +9,7 @@ import { Badge, Notice } from './ui';
 
 export const UNREAD_UPDATES_KEY = ['updates-unread'] as const;
 
-/** Owner: number of unread updates. Polls until Socket.IO arrives (Phase 7). */
+/** Owner: number of unread updates. Live events refresh it; polling is a fallback. */
 export function useUnreadUpdates() {
   return useQuery({
     queryKey: UNREAD_UPDATES_KEY,

@@ -19,7 +19,10 @@ import {
   reactivateEmployee,
   updateEmployee,
 } from '../../api/employees';
+import { listAlerts } from '../../api/alerts';
 import { listJobRoles } from '../../api/jobRoles';
+import { AlertCard, useLive } from '../../components/AlertViews';
+import { ALERTS_KEY } from '../../realtime/effects';
 import { listTasks } from '../../api/tasks';
 import { listUpdates } from '../../api/updates';
 import { InboxLink, RecentUpdates } from '../../components/UpdateViews';
@@ -47,6 +50,7 @@ export function EmployeeDetailPage() {
   const { id = '' } = useParams();
   const employee = useQuery({ queryKey: ['employee', id], queryFn: () => getEmployee(id) });
   const roles = useQuery({ queryKey: ['job-roles'], queryFn: listJobRoles });
+  const live = useLive().data?.employees.find((e) => e.userId === id);
 
   if (employee.isPending) return <Spinner label="Loading…" />;
   if (!employee.data) return <ErrorBox error={employee.error} />;
@@ -60,11 +64,12 @@ export function EmployeeDetailPage() {
       >
         ‹ All employees
       </Link>
-      <PageHeader title={emp.name} actions={<StatusBadge status={emp.status} />} />
+      <PageHeader title={emp.name} actions={<StatusBadge status={emp.status} live={live} />} />
       <Profile emp={emp} roles={roles.data} />
       <Hours userId={emp.id} />
       <Tasks userId={emp.id} />
       <Updates userId={emp.id} />
+      <IdleEvents userId={emp.id} />
       {emp.status === 'ACTIVE' && <Settings key={emp.id} emp={emp} roles={roles.data ?? []} />}
       <Actions emp={emp} />
     </div>
@@ -132,6 +137,38 @@ function Hours({ userId }: { userId: string }) {
             <SessionList data={monthly.data} />
           </details>
         </div>
+      )}
+    </Card>
+  );
+}
+
+/** Failed idle checks of this employee, with reasons (docs/SCREENS.md, employee page). */
+function IdleEvents({ userId }: { userId: string }) {
+  const events = useQuery({
+    queryKey: [ALERTS_KEY[0], 'employee', userId],
+    queryFn: () => listAlerts({ employeeId: userId, kind: 'IDLE', limit: 5 }),
+  });
+  return (
+    <Card className="space-y-2">
+      <h2 className="font-semibold">Idle events</h2>
+      <ErrorBox error={events.error} />
+      {events.data?.items.length === 0 && (
+        <p className="text-sm text-gray-600">No failed idle checks.</p>
+      )}
+      <ul className="space-y-2">
+        {events.data?.items.map((a) => (
+          <li key={a.id}>
+            <AlertCard alert={a} />
+          </li>
+        ))}
+      </ul>
+      {events.data && events.data.items.length > 0 && (
+        <Link
+          to={`/owner/alerts?show=all&employeeId=${userId}`}
+          className="inline-flex min-h-11 items-center text-sm text-blue-800"
+        >
+          See all alerts for this employee
+        </Link>
       )}
     </Card>
   );

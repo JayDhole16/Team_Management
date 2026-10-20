@@ -1,10 +1,12 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client';
 import { createAccessCodeRepository } from './access-code.repository';
+import { createAlertRepository } from './alert.repository';
 import { createAuditRepository } from './audit.repository';
 import { createConsentRepository } from './consent.repository';
 import { createJobRoleRepository } from './job-role.repository';
 import { createProgressUpdateRepository } from './progress-update.repository';
 import { createProjectRepository } from './project.repository';
+import { createPushSubscriptionRepository } from './push-subscription.repository';
 import { createHeartbeatRepository } from './heartbeat.repository';
 import { createRefreshTokenRepository } from './refresh-token.repository';
 import { createSessionGapRepository } from './session-gap.repository';
@@ -29,6 +31,8 @@ export function createRepos(db: Db) {
     projects: createProjectRepository(db),
     tasks: createTaskRepository(db),
     updates: createProgressUpdateRepository(db),
+    alerts: createAlertRepository(db),
+    pushSubscriptions: createPushSubscriptionRepository(db),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;

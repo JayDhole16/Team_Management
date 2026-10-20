@@ -25,9 +25,13 @@ Open http://localhost:5173 and log in with your OWNER_EMAIL / OWNER_PASSWORD. ht
 - **Employee:** logging in starts the work session. My Day shows the timer with Stop session (break) and Resume, plus hours today and this month. My hours has the per-day list.
 - **Projects and tasks (Phase 5):** Projects -> New project: describe it in your own words, "Generate tasks with AI" (or "Write it by hand"), edit, Save, then Assign each task. Tasks is the board (filters by employee, role, project) with "Direct task". Employees see My tasks (Start, Mark blocked, Complete, Reopen) and a Next task shortcut on My Day.
 - **Progress updates (Phase 6):** employees open Updates, write what they did (optionally pick a task), press "Preview plain version", then Send. When the AI is offline, "Send without plain version" appears. The owner's Updates page (with the unread count in the menu) shows the AI's plain summary first, blockers highlighted, and the original under "Show original (technical)"; "Mark as read" or "Mark all as read".
-- **Phone:** below 768 px the menu becomes a bottom tab bar. To try it on a real phone, start the dev server with `LK_TUNNEL=1 pnpm dev` (Git Bash), run `cloudflared tunnel --url http://localhost:5173` and open the https address it prints. This is for testing only: the address changes every run, anyone with it can reach your dev server, so close the tunnel afterwards. Never set `TRUST_PROXY=true` for a quick tunnel.
+- **Live status and alerts (Phase 7):** Live status shows every employee as Working, Idle, On break or Offline (a red "Agent not running" outline when a session is open without desktop-agent heartbeats), the session timer, hours today and last seen; it updates by itself (Socket.IO). Press "Enable alerts" in the top bar once per page load: browsers play sound only after a click. An idle or security alert then beeps and pops up with the employee's name and reason, and stays under Alerts until you press Acknowledge. Employees get a pop-up when a task is sent to them; the owner when someone registers.
+- **Phone notifications (Phase 7):** Alerts -> "Enable notifications" sends idle and security alerts to the phone even with the page closed. Needs the VAPID keys (below) and https (the tunnel or the deployed site). On iPhone: Share -> "Add to Home Screen" first, open the app from the icon, then enable.
+- **Phone:** below 768 px the menu becomes a bottom tab bar (Overview, Live, Alerts, Tasks, More; Updates, Employees, Projects and Invites are under More). To try it on a real phone, start the dev server with `LK_TUNNEL=1 pnpm dev` (Git Bash), run `cloudflared tunnel --url http://localhost:5173` and open the https address it prints. This is for testing only: the address changes every run, anyone with it can reach your dev server, so close the tunnel afterwards. Never set `TRUST_PROXY=true` for a quick tunnel.
 
 After pulling a change that adds new keys to `.env.example`, run `pnpm env:setup --add-missing`. It appends only the missing keys, generates random secrets for them and never prints values.
+
+**Phone notifications setup:** `pnpm env:setup --add-missing` generates `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. Set `VAPID_SUBJECT=mailto:<owner email>` in `.env` yourself and restart the server. Until all three are set, push is off and the Alerts page says so (the beep still works). Never share the private key; changing the keys means every phone has to enable notifications again.
 
 ## Tests
 
@@ -129,6 +133,27 @@ curl -s -X PATCH $API/updates/<update id>/read -H "authorization: Bearer $OWNER"
 curl -s -X POST $API/updates/read-all -H "authorization: Bearer $OWNER" -H 'content-type: application/json' -d '{"upTo":"<createdAt of the newest update you saw>"}'
 ```
 
+### Live status, alerts and the agent simulator (Phase 7)
+
+Until the desktop agent exists (Phase 8/9), `pnpm sim:agent` plays it for one employee: logs in, starts the session, sends heartbeats, reports an idle event and stops. It talks to a local API only and never prints the token. Open Live status as the owner, press "Enable alerts", then in Git Bash:
+
+```bash
+SIM_PASSWORD='<employee password>' pnpm sim:agent -- --email <employee email> --idle-after 20 --reason NO_FACE --stop-after 60
+# --interval <sec> (15)  --away-after <sec>  --logout (ends the session at once)  --help
+```
+
+You should hear a beep and see "<name>: nobody at the camera"; the card turns Idle (amber). After `--stop-after` the heartbeats stop: "Agent not running" appears after about 90 s and the card turns Offline about 3 minutes after the last heartbeat (the session auto-closes). Reasons: `NO_ACTIVITY`, `NO_FACE`, `FACE_MISMATCH`, `CAMERA_UNAVAILABLE`.
+
+```bash
+# The same by hand: employee idle event (at most 20 per 15 min), owner alerts
+curl -s -X POST $API/agent/idle-event -H "authorization: Bearer $EMP" -H 'content-type: application/json' -d "{\"at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"reason\":\"NO_FACE\"}"
+curl -s $API/live -H "authorization: Bearer $OWNER"
+curl -s "$API/alerts?status=open" -H "authorization: Bearer $OWNER"   # also employeeId, kind=IDLE|SECURITY, limit, cursor
+curl -s $API/alerts/open-count -H "authorization: Bearer $OWNER"
+curl -s -X PATCH $API/alerts/<alert id>/ack -H "authorization: Bearer $OWNER"
+curl -s -X POST $API/alerts/ack-all -H "authorization: Bearer $OWNER" -H 'content-type: application/json' -d '{"upTo":"<at of the newest alert you saw>"}'
+```
+
 ## Local LLM (Ollama)
 
 1. Install Ollama from ollama.com, then pull the model set in `OLLAMA_MODEL` (default `qwen3.5:4b`): `ollama pull qwen3.5:4b`.
@@ -148,6 +173,7 @@ curl -s -X POST $API/updates/read-all -H "authorization: Bearer $OWNER" -H 'cont
 | `pnpm --filter server test` | Tests for one package |
 | `pnpm db:migrate` / `pnpm db:seed` | Prisma migrations / seed data |
 | `pnpm llm:eval -- --model <name>` | Runs the LLM eval samples against local Ollama and writes a report |
+| `pnpm sim:agent -- --email <e>` | Dev only: pretends to be an employee's desktop agent (heartbeats, idle event) |
 | `pnpm format` | Format all files with Prettier |
 
 ## Layout
@@ -165,7 +191,7 @@ scripts/        Ops scripts
 | Port | Service |
 |---|---|
 | 4000 | API server (`GET /api/v1/health`) |
-| 5173 | Web app (Vite dev server; proxies `/api` to 4000) |
+| 5173 | Web app (Vite dev server; proxies `/api` and `/socket.io` to 4000) |
 | 4100 / 4101 / 5174 | API / fake Ollama / web started by `pnpm test:e2e` only |
 | 5434 | PostgreSQL in Docker (bound to 127.0.0.1 only). Change `DB_PORT` and the port in `DATABASE_URL` in `.env` if it is taken |
 

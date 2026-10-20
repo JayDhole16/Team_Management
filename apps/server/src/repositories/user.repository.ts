@@ -17,5 +17,13 @@ export function createUserRepository(db: Db) {
       db.user.findMany({ where: filter, orderBy: { name: 'asc' } }),
 
     countByRole: (role: UserRole) => db.user.count({ where: { role } }),
+
+    /** Active employees for the live board (name and role label only). */
+    listActiveEmployeesBrief: (ids?: string[]) =>
+      db.user.findMany({
+        where: { role: 'EMPLOYEE', status: 'ACTIVE', ...(ids ? { id: { in: ids } } : {}) },
+        select: { id: true, name: true, jobRole: { select: { label: true } } },
+        orderBy: { name: 'asc' },
+      }),
   };
 }

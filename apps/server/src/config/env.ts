@@ -7,6 +7,14 @@ const secret = z
   .string()
   .min(32, 'must be at least 32 characters (run pnpm env:setup --add-missing)');
 const booleanFlag = z.enum(['true', 'false']).transform((v) => v === 'true');
+/** An empty value (e.g. `VAPID_SUBJECT=` in .env) counts as not set. */
+const optional = <S extends z.ZodType>(schema: S) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema.optional());
+const base64url = (bytes: number) =>
+  z
+    .string()
+    .regex(/^[A-Za-z0-9_-]+$/, 'must be base64url (run pnpm env:setup --add-missing)')
+    .refine((v) => Buffer.from(v, 'base64url').length === bytes, `must be ${bytes} bytes`);
 
 /** Local LLM settings. Exported on its own so scripts/llm-eval.ts can run without DB or JWT secrets. */
 export const LlmEnvSchema = z.object({
@@ -45,6 +53,13 @@ const EnvSchema = LlmEnvSchema.extend({
   SESSION_NO_HEARTBEAT_MAX_HOURS: z.coerce.number().int().min(1).max(24).default(12),
   /** Set to true only behind a trusted reverse proxy / tunnel (Phase 11). */
   TRUST_PROXY: booleanFlag.default(false),
+  /** Web Push (PRD O-14). Push is on only when all three are set (pnpm env:setup makes the
+   *  keys; the subject is `mailto:<owner email>`). */
+  VAPID_PUBLIC_KEY: optional(base64url(65)),
+  VAPID_PRIVATE_KEY: optional(base64url(32)),
+  VAPID_SUBJECT: optional(
+    z.string().regex(/^(mailto:\S+@\S+|https:\/\/\S+)$/, 'must be mailto:<email> or an https URL'),
+  ),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

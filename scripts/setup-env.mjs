@@ -2,7 +2,7 @@
 // Never prints secret values, only the names of the keys it generated.
 // Usage: pnpm env:setup                 (refuses to overwrite an existing .env)
 //        pnpm env:setup --add-missing   (appends keys that are in .env.example but not in .env)
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,8 +17,28 @@ const byteLength = { FACE_ENCRYPTION_KEY: 32, POSTGRES_PASSWORD: 24, OWNER_PASSW
 
 const lineRe = /^([A-Z0-9_]+)=(\S*)(.*)$/;
 
-/** Placeholder -> random hex; everything else is kept. */
+/** Web Push (VAPID) needs a P-256 key pair: public = uncompressed point, private = d (base64url). */
+let vapidPair;
+function vapidKeys() {
+  if (!vapidPair) {
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const jwk = privateKey.export({ format: 'jwk' });
+    const point = Buffer.concat([
+      Buffer.from([4]),
+      Buffer.from(jwk.x, 'base64url'),
+      Buffer.from(jwk.y, 'base64url'),
+    ]);
+    vapidPair = { VAPID_PUBLIC_KEY: point.toString('base64url'), VAPID_PRIVATE_KEY: jwk.d };
+  }
+  return vapidPair;
+}
+
+/** Placeholder -> random hex (or a VAPID key); everything else is kept. */
 function resolveValue(key, value, generated) {
+  if (value.startsWith('change-me') && key in { VAPID_PUBLIC_KEY: 1, VAPID_PRIVATE_KEY: 1 }) {
+    generated.push(key);
+    return vapidKeys()[key];
+  }
   if (value.startsWith('change-me') && key !== 'DATABASE_URL') {
     generated.push(key);
     return randomBytes(byteLength[key] ?? 32).toString('hex');
@@ -45,6 +65,18 @@ if (addMissing) {
     const m = lineRe.exec(line);
     if (!m || present.has(m[1])) continue;
     const [, key, value, rest] = m;
+    // The two VAPID keys belong together: never pair a new key with an old one.
+    const partner = {
+      VAPID_PUBLIC_KEY: 'VAPID_PRIVATE_KEY',
+      VAPID_PRIVATE_KEY: 'VAPID_PUBLIC_KEY',
+    }[key];
+    if (partner && present.has(partner)) {
+      added.push(`${key}=${rest}`);
+      console.log(
+        `${key} added empty: .env already has ${partner}. Set both keys yourself, or delete both and run this again.`,
+      );
+      continue;
+    }
     added.push(`${key}=${resolveValue(key, value, generated)}${rest}`);
   }
   if (added.length === 0) {

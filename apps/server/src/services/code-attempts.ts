@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { CODE_FAILURES_PER_IP, type ServiceContext } from './context';
 import { invalidCode, rateLimited } from '../lib/errors';
 
@@ -31,7 +32,9 @@ export async function failCodeAttempt(
     });
     ctx.bus.emit('security:alert', {
       kind: flow === 'claim' ? 'CLAIM_IP_BLOCKED' : 'RECOVERY_IP_BLOCKED',
-      message: `Too many wrong access codes from ${ip}. That address is blocked for 15 minutes.`,
+      // Only a real address goes into the owner's alert text (with TRUST_PROXY the value comes
+      // from a header). The raw value stays in the audit row.
+      message: `Too many wrong access codes from ${isIP(ip) ? ip : 'one address'}. That address is blocked for 15 minutes.`,
       at: now.toISOString(),
     });
   }

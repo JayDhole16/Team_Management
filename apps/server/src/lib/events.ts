@@ -1,9 +1,9 @@
 import { EventEmitter } from 'node:events';
-import type { DeviceMode, TaskStatus } from '@lk/shared';
+import type { Alert, DeviceMode, LiveStatus, SecurityAlertKind, TaskStatus } from '@lk/shared';
 
 /**
- * In-process events for the owner. Socket.IO (Phase 7) subscribes to this bus and pushes
- * them to the owner room; until then they are only logged and kept in audit_log.
+ * In-process events. `realtime/socket.ts` forwards the owner/employee ones over Socket.IO
+ * (ids and names only), `services/push.service.ts` turns `alert:created` into phone pushes.
  */
 export interface AppEvents {
   'employee:registered': {
@@ -15,14 +15,10 @@ export interface AppEvents {
     deviceMode: DeviceMode;
     at: string;
   };
+  /** Raised by the code, login and registration services. Stored as an alert, then
+   *  announced as `alert:created`. `message` is written by the server, never user text. */
   'security:alert': {
-    kind:
-      | 'CLAIM_FAILURE_CAP'
-      | 'CLAIM_IP_BLOCKED'
-      | 'RECOVERY_IP_BLOCKED'
-      | 'LOGIN_ACCOUNT_LOCKED'
-      | 'REFRESH_TOKEN_REUSE'
-      | 'DUPLICATE_FACE';
+    kind: SecurityAlertKind;
     message: string;
     at: string;
   };
@@ -48,6 +44,16 @@ export interface AppEvents {
     employeeId: string;
     at: string;
   };
+  /** A new idle or security alert was stored (owner toast, beep, push). */
+  'alert:created': { alert: Alert };
+  /** The owner acknowledged alerts (other owner tabs and phones update). */
+  'alert:acked': { at: string };
+  /** Something that can change an employee's live status happened (session, heartbeat,
+   *  idle alert). The live tracker recomputes and emits `status:changed` if it changed. */
+  'presence:changed': { userId: string };
+  'status:changed': { userId: string; status: LiveStatus; agentRunning: boolean; at: string };
+  /** Their open sockets are closed at once. */
+  'employee:deactivated': { userId: string };
 }
 
 export interface EventBus {

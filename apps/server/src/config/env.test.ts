@@ -56,6 +56,47 @@ describe('parseEnv', () => {
   });
 });
 
+describe('Web Push (VAPID) settings', () => {
+  const pub = Buffer.alloc(65, 4).toString('base64url');
+  const priv = Buffer.alloc(32, 7).toString('base64url');
+
+  it('are optional; empty values count as not set', () => {
+    const env = parseEnv({
+      ...base,
+      VAPID_PUBLIC_KEY: '',
+      VAPID_PRIVATE_KEY: '',
+      VAPID_SUBJECT: '',
+    });
+    expect(env.VAPID_PUBLIC_KEY).toBeUndefined();
+    expect(env.VAPID_SUBJECT).toBeUndefined();
+  });
+
+  it('accept a P-256 key pair and a mailto: or https subject', () => {
+    const env = parseEnv({
+      ...base,
+      VAPID_PUBLIC_KEY: pub,
+      VAPID_PRIVATE_KEY: priv,
+      VAPID_SUBJECT: 'mailto:owner@example.com',
+    });
+    expect(env.VAPID_PUBLIC_KEY).toBe(pub);
+    expect(parseEnv({ ...base, VAPID_SUBJECT: 'https://leaderskey.example' }).VAPID_SUBJECT).toBe(
+      'https://leaderskey.example',
+    );
+  });
+
+  it('refuse a wrong key size or subject without echoing the key', () => {
+    let message = '';
+    try {
+      parseEnv({ ...base, VAPID_PRIVATE_KEY: pub, VAPID_SUBJECT: 'owner@example.com' });
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('VAPID_PRIVATE_KEY');
+    expect(message).toContain('VAPID_SUBJECT');
+    expect(message).not.toContain(pub);
+  });
+});
+
 describe('LLM settings', () => {
   it('defaults to a 4B model, a 4096 context and English plain language (PRD Q8)', () => {
     expect(parseEnv(base)).toMatchObject({

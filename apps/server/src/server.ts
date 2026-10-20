@@ -2,6 +2,7 @@ import { buildApp } from './app';
 import { loadEnv } from './config/env';
 import { loggerOptions } from './config/logger';
 import { startExpireCodesJob } from './jobs/expire-codes';
+import { startLiveStatusJob } from './jobs/live-status';
 import { startSessionJobs } from './jobs/sessions';
 import { createDataAccess } from './repositories';
 import { createHealthRepository } from './repositories/health.repository';
@@ -16,9 +17,10 @@ const app = buildApp(
 );
 
 const bus = app.serviceContext.bus;
-// Socket.IO delivers these to the owner in Phase 7; for now they are logged (no secrets in them).
+// Socket.IO (realtime/socket.ts) delivers these; they are also logged (ids only, no secrets).
 bus.on('employee:registered', (e) => app.log.info({ userId: e.userId }, 'employee registered'));
-bus.on('security:alert', (e) => app.log.warn({ kind: e.kind }, `security alert: ${e.message}`));
+// Kind only: the message can name an employee or an address.
+bus.on('security:alert', (e) => app.log.warn({ kind: e.kind }, 'security alert'));
 // Ids only: task text is never logged.
 bus.on('task:assigned', (e) =>
   app.log.info({ taskId: e.taskId, assigneeId: e.assigneeId }, 'task assigned'),
@@ -32,12 +34,16 @@ bus.on('update:sent', (e) =>
 
 const stopExpireJob = startExpireCodesJob(app.serviceContext, app.log);
 const stopSessionJobs = startSessionJobs(app.serviceContext, app.log);
+const stopLiveStatusJob = startLiveStatusJob(app);
 
 async function shutdown(signal: string) {
   app.log.info(`${signal} received, shutting down`);
   stopExpireJob();
   stopSessionJobs();
+  stopLiveStatusJob();
   await app.close();
+  // Let alert and push writes that are still running finish before the database goes.
+  await app.serviceContext.background.drain();
   await prisma.$disconnect();
   process.exit(0);
 }

@@ -52,6 +52,7 @@ Tags: [DECISION] ask the client · [SETUP] install or configure · [TEST] check 
 - [TEST] Write real technical updates and check the plain version makes sense to the owner.
 
 ## Phase 7 Realtime
+- [SETUP] For phone push: run `pnpm env:setup --add-missing` (generates the VAPID keys), set `VAPID_SUBJECT=mailto:<owner email>` in `.env`, restart the server. Push needs https (the tunnel or the deployed site).
 - [TEST] On the owner's real computer and browser: click "Enable alerts", set the volume, trigger a simulated idle event, confirm the beep with the employee's name. Browsers block sound until the page has been clicked.
 - [TEST] On your phone: confirm the beep works only while the page is open. (R) Enable push notifications and confirm an alert arrives with the page closed. On iPhone, Add to Home Screen first.
 

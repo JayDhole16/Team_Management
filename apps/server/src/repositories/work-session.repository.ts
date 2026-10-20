@@ -47,6 +47,31 @@ export function createWorkSessionRepository(db: Db) {
         orderBy: { startedAt: 'asc' },
       }),
 
+    listOpenForUsers: (userIds: string[]) =>
+      db.workSession.findMany({ where: { userId: { in: userIds }, endedAt: null } }),
+
+    /** Sessions of several users overlapping [start, end) (live board). */
+    listOverlappingForUsers: (userIds: string[], start: Date, end: Date) =>
+      db.workSession.findMany({
+        where: {
+          userId: { in: userIds },
+          startedAt: { lt: end },
+          OR: [{ endedAt: null }, { endedAt: { gt: start } }],
+        },
+        orderBy: { startedAt: 'asc' },
+      }),
+
+    /** Each user's most recently ended session. */
+    lastEndedForUsers: (userIds: string[]) =>
+      userIds.length === 0
+        ? Promise.resolve([])
+        : db.$queryRaw<{ userId: string; endedAt: Date; endReason: SessionEndReason | null }[]>`
+            SELECT DISTINCT ON (user_id) user_id AS "userId", ended_at AS "endedAt",
+                   end_reason AS "endReason"
+            FROM work_sessions
+            WHERE user_id = ANY(${userIds}::uuid[]) AND ended_at IS NOT NULL
+            ORDER BY user_id, ended_at DESC`,
+
     /** Open sessions whose agent went silent before `cutoff`. */
     listSilentOpen: (cutoff: Date) =>
       db.workSession.findMany({

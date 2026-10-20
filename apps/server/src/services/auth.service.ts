@@ -73,7 +73,8 @@ export async function login(
       });
       ctx.bus.emit('security:alert', {
         kind: 'LOGIN_ACCOUNT_LOCKED',
-        message: `Too many wrong passwords for ${user.email}. Login for this account is paused for 15 minutes.`,
+        // The name, not the email: this text goes over the socket and onto the owner's screen.
+        message: `Too many wrong passwords for ${user.name}'s account. Login for it is paused for 15 minutes.`,
         at: ctx.clock().toISOString(),
       });
     }
@@ -128,5 +129,6 @@ export async function logout(ctx: ServiceContext, refreshToken: string | undefin
   const revoked = await ctx.data.repos.refreshTokens.revoke(stored.id, now);
   if (revoked === 1 && stored.expiresAt > now) {
     await ctx.data.transaction((repos) => closeOpenSession(repos, stored.userId, now, 'LOGOUT'));
+    ctx.bus.emit('presence:changed', { userId: stored.userId });
   }
 }

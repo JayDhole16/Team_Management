@@ -14,6 +14,7 @@ import * as authApi from '../api/auth';
 import { errorMessage } from '../api/errors';
 import { startSession } from '../api/sessions';
 import { authSession, type AuthSnapshot } from './session';
+import { disablePush } from '../lib/push';
 
 export interface LoginResult {
   user: Me;
@@ -65,7 +66,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Throws if the server could not be reached; the user then stays signed in (see AuthSession.logout).
-  const logout = useCallback(() => authSession.logout(() => authApi.logout()), []);
+  // The owner's device also stops getting alert notifications (a shared or borrowed browser).
+  const logout = useCallback(
+    () =>
+      authSession.logout(async () => {
+        if (authSession.getSnapshot().user?.role === 'OWNER') await disablePush().catch(() => null);
+        return authApi.logout();
+      }),
+    [],
+  );
 
   const retry = useCallback(() => void authSession.bootstrap(), []);
 

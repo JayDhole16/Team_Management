@@ -1,10 +1,10 @@
-import type { Employee, JobRole, UserStatus } from '@lk/shared';
+import type { Employee, JobRole, LiveEmployee, UserStatus } from '@lk/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { listEmployees } from '../../api/employees';
 import { listJobRoles } from '../../api/jobRoles';
-import { fetchTodayHours } from '../../api/reports';
+import { useLive } from '../../components/AlertViews';
 import {
   Badge,
   Button,
@@ -15,6 +15,7 @@ import {
   Spinner,
 } from '../../components/ui';
 import { DEVICE_MODE_LABEL, roleLabel } from '../../lib/labels';
+import { LIVE_STATUS } from '../../lib/liveStatus';
 import { formatHours } from '../../lib/time';
 import { AddEmployeeModal } from './AddEmployeeModal';
 
@@ -28,6 +29,9 @@ export function EmployeesPage() {
     queryKey: ['employees', filter],
     queryFn: () => listEmployees(filter),
   });
+  // Hours and live status for everyone in one request (deactivated employees are not on it).
+  const live = useLive();
+  const liveById = new Map(live.data?.employees.map((e) => [e.userId, e]));
 
   return (
     <div>
@@ -65,7 +69,7 @@ export function EmployeesPage() {
         </SelectField>
       </div>
       {employees.isPending && <Spinner label="Loading employees…" />}
-      <ErrorBox error={employees.error} />
+      <ErrorBox error={employees.error ?? live.error} />
       {employees.data?.length === 0 && (
         <EmptyState title="No employees here yet">
           Press &ldquo;Add new employee&rdquo; to create a code for a new person.
@@ -77,7 +81,12 @@ export function EmployeesPage() {
           <ul className="space-y-2 md:hidden">
             {employees.data.map((emp) => (
               <li key={emp.id}>
-                <EmployeeCard employee={emp} roles={roles.data} />
+                <EmployeeCard
+                  employee={emp}
+                  roles={roles.data}
+                  live={liveById.get(emp.id)}
+                  loaded={live.data !== undefined}
+                />
               </li>
             ))}
           </ul>
@@ -110,10 +119,15 @@ export function EmployeesPage() {
                     {emp.deviceMode ? DEVICE_MODE_LABEL[emp.deviceMode] : '—'}
                   </td>
                   <td className="px-3 py-2">
-                    <StatusBadge status={emp.status} />
+                    <StatusBadge status={emp.status} live={liveById.get(emp.id)} />
                   </td>
                   <td className="px-3 py-2">every {emp.idleIntervalMin} min</td>
-                  <HoursCells employee={emp} />
+                  <td className="px-3 py-2">
+                    {hoursText(liveById.get(emp.id), 'todaySec', live.data !== undefined)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {hoursText(liveById.get(emp.id), 'monthSec', live.data !== undefined)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -125,33 +139,41 @@ export function EmployeesPage() {
   );
 }
 
-export function StatusBadge({ status }: { status: UserStatus }) {
-  return status === 'ACTIVE' ? (
-    <Badge tone="green">Active</Badge>
-  ) : (
-    <Badge tone="grey">Deactivated</Badge>
-  );
+/** Deactivated, or (active) the live status: Working, Idle, On break, Offline. */
+export function StatusBadge({
+  status,
+  live,
+}: {
+  status: UserStatus;
+  live?: LiveEmployee | undefined;
+}) {
+  if (status !== 'ACTIVE') return <Badge tone="grey">Deactivated</Badge>;
+  if (!live) return <Badge tone="green">Active</Badge>;
+  const s = LIVE_STATUS[live.status];
+  return <Badge tone={s.tone}>{s.label}</Badge>;
 }
 
-function useTodayHours(userId: string) {
-  return useQuery({
-    queryKey: ['hours-today', userId],
-    queryFn: () => fetchTodayHours({ userId }),
-  });
+/** Hours from the live board; '—' for someone not on it (deactivated). */
+function hoursText(
+  live: LiveEmployee | undefined,
+  field: 'todaySec' | 'monthSec',
+  loaded: boolean,
+) {
+  if (!loaded) return '…';
+  return live ? formatHours(live[field]) : '—';
 }
 
-function HoursCells({ employee }: { employee: Employee }) {
-  const hours = useTodayHours(employee.id);
-  return (
-    <>
-      <td className="px-3 py-2">{hours.data ? formatHours(hours.data.todaySec) : '…'}</td>
-      <td className="px-3 py-2">{hours.data ? formatHours(hours.data.monthSec) : '…'}</td>
-    </>
-  );
-}
-
-function EmployeeCard({ employee, roles }: { employee: Employee; roles: JobRole[] | undefined }) {
-  const hours = useTodayHours(employee.id);
+function EmployeeCard({
+  employee,
+  roles,
+  live,
+  loaded,
+}: {
+  employee: Employee;
+  roles: JobRole[] | undefined;
+  live: LiveEmployee | undefined;
+  loaded: boolean;
+}) {
   return (
     <Link
       to={`/owner/employees/${employee.id}`}
@@ -159,15 +181,14 @@ function EmployeeCard({ employee, roles }: { employee: Employee; roles: JobRole[
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium text-gray-900">{employee.name}</span>
-        <StatusBadge status={employee.status} />
+        <StatusBadge status={employee.status} live={live} />
       </div>
       <p className="mt-1 text-sm text-gray-600">
         {roleLabel(roles, employee.jobRoleId)} ·{' '}
         {employee.deviceMode ? DEVICE_MODE_LABEL[employee.deviceMode] : '—'}
       </p>
       <p className="mt-1 text-sm text-gray-800">
-        Today {hours.data ? formatHours(hours.data.todaySec) : '…'} · Month{' '}
-        {hours.data ? formatHours(hours.data.monthSec) : '…'}
+        Today {hoursText(live, 'todaySec', loaded)} · Month {hoursText(live, 'monthSec', loaded)}
       </p>
     </Link>
   );

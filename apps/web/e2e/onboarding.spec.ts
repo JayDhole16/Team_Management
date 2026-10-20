@@ -14,10 +14,16 @@ test('owner invites, employee registers, and the work timer runs', async ({
 
   // --- Owner creates an invite code ---
   await loginAs(page, E2E_OWNER.email, E2E_OWNER.password, '/owner');
-  await page
-    .getByRole('link', { name: 'Employees', exact: true })
-    .filter({ visible: true })
-    .click();
+  if (testInfo.project.name === 'phone') {
+    // Phone tab bar: Overview, Live, Alerts, Tasks, More (Employees is under More).
+    await page.getByTestId('tab-bar').getByRole('link', { name: 'More' }).click();
+    await page.getByRole('main').getByRole('link', { name: 'Employees', exact: true }).click();
+  } else {
+    await page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('link', { name: 'Employees', exact: true })
+      .click();
+  }
   await expect(page.getByRole('heading', { name: 'Employees' })).toBeVisible();
   await page.getByRole('button', { name: 'Add new employee' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add new employee' });

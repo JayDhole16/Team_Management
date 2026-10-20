@@ -12,9 +12,11 @@ import { ProfilePage } from '../pages/employee/ProfilePage';
 import { UpdatesPage as MyUpdatesPage } from '../pages/employee/UpdatesPage';
 import { HealthPage } from '../pages/HealthPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { AlertsPage } from '../pages/owner/AlertsPage';
 import { EmployeeDetailPage } from '../pages/owner/EmployeeDetailPage';
 import { EmployeesPage } from '../pages/owner/EmployeesPage';
 import { InvitesPage } from '../pages/owner/InvitesPage';
+import { LivePage } from '../pages/owner/LivePage';
 import { MorePage } from '../pages/owner/MorePage';
 import { OverviewPage } from '../pages/owner/OverviewPage';
 import { NewProjectPage } from '../pages/owner/projects/NewProjectPage';
@@ -52,6 +54,8 @@ export const router = createBrowserRouter([
         element: <OwnerLayout />,
         children: [
           { index: true, element: <OverviewPage /> },
+          { path: 'live', element: <LivePage /> },
+          { path: 'alerts', element: <AlertsPage /> },
           { path: 'employees', element: <EmployeesPage /> },
           { path: 'employees/:id', element: <EmployeeDetailPage /> },
           { path: 'invites', element: <InvitesPage /> },

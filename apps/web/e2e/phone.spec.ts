@@ -16,14 +16,16 @@ test('owner pages work at phone width with the bottom tab bar', async ({ page, b
   await loginAs(page, E2E_OWNER.email, E2E_OWNER.password, '/owner');
   const tabs = page.getByTestId('tab-bar');
   await expect(tabs).toBeVisible();
-  for (const name of ['Overview', 'Tasks', 'Employees', 'More']) {
+  // docs/SCREENS.md: Overview, Live, Alerts, Tasks, More.
+  for (const name of ['Overview', 'Live', 'Alerts', 'Tasks', 'More']) {
     await expect(tabs.getByRole('link', { name })).toBeVisible();
   }
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();
 
   const headings: Record<string, RegExp> = {
+    Live: /^Live status$/,
+    Alerts: /^Alerts/,
     Tasks: /^Tasks$/,
-    Employees: /^Employees$/,
     More: /^More$/,
     Overview: /^Hello, /,
   };
@@ -34,8 +36,10 @@ test('owner pages work at phone width with the bottom tab bar', async ({ page, b
     await expectNoSideScroll(page);
   }
 
-  // Projects and Invites are under More.
+  // Updates, Employees, Projects and Invites are under More.
   for (const [link, heading] of [
+    ['Updates', /^Updates/],
+    ['Employees', /^Employees$/],
     ['Projects', /^Projects$/],
     ['Invites and codes', /^Invites and codes$/],
   ] as const) {
@@ -46,7 +50,8 @@ test('owner pages work at phone width with the bottom tab bar', async ({ page, b
   }
 
   // Add new employee works on a phone; the code is big and the buttons easy to tap.
-  await tabs.getByRole('link', { name: 'Employees' }).click();
+  await tabs.getByRole('link', { name: 'More' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Employees' }).click();
   await page.getByRole('button', { name: 'Add new employee' }).click();
   const dialog = page.getByRole('dialog', { name: 'Add new employee' });
   await dialog.getByRole('radio', { name: /Company MacBook/ }).check();

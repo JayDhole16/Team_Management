@@ -13,7 +13,11 @@ describe('access tokens', () => {
       15,
     );
     expect(expiresAt.toISOString()).toBe('2026-10-18T05:15:00.000Z');
-    expect(await verifyAccessToken(token, SECRET, now)).toEqual({ sub: 'u1', role: 'EMPLOYEE' });
+    expect(await verifyAccessToken(token, SECRET, now)).toEqual({
+      sub: 'u1',
+      role: 'EMPLOYEE',
+      expiresAt,
+    });
   });
 
   it('rejects an expired token', async () => {

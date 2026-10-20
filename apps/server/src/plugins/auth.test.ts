@@ -71,6 +71,14 @@ describe('RBAC on every route', () => {
         'GET /api/v1/updates/unread-count',
         'PATCH /api/v1/updates/:id/read',
         'POST /api/v1/updates/read-all',
+        'GET /api/v1/live',
+        'GET /api/v1/alerts',
+        'GET /api/v1/alerts/open-count',
+        'PATCH /api/v1/alerts/:id/ack',
+        'POST /api/v1/alerts/ack-all',
+        'GET /api/v1/push/config',
+        'POST /api/v1/push/subscribe',
+        'DELETE /api/v1/push/subscribe',
       ]),
     );
   });
@@ -138,6 +146,7 @@ describe('RBAC on every route', () => {
         'POST /api/v1/updates/preview',
         'POST /api/v1/updates',
         'GET /api/v1/updates/mine',
+        'POST /api/v1/agent/idle-event',
       ]),
     );
     for (const route of employeeOnly) {

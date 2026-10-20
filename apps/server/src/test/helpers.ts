@@ -8,6 +8,7 @@ import { loggerOptions } from '../config/logger';
 import type { PrismaClient } from '../generated/prisma/client';
 import { createEventBus, type AppEvents } from '../lib/events';
 import { createDataAccess, type DataAccess } from '../repositories';
+import type { PushSender } from '../lib/push-sender';
 import { createHealthRepository } from '../repositories/health.repository';
 import { createPrismaClient } from '../repositories/prisma';
 import { runSeed } from '../services/seed.service';
@@ -36,7 +37,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
 
 export async function resetDb(): Promise<void> {
   await testPrisma().$executeRawUnsafe(
-    'TRUNCATE users, job_roles, devices, access_codes, refresh_tokens, consent_records, audit_log, work_sessions, heartbeats, work_session_gaps, projects, tasks, task_status_events CASCADE',
+    'TRUNCATE users, job_roles, devices, access_codes, refresh_tokens, consent_records, audit_log, work_sessions, heartbeats, work_session_gaps, projects, tasks, task_status_events, progress_updates, alerts, push_subscriptions CASCADE',
   );
 }
 
@@ -62,10 +63,21 @@ export interface HarnessOptions {
   captureLogs?: boolean;
   /** Defaults to a mock that behaves like a stopped Ollama, so no test needs a real model. */
   llm?: ReturnType<typeof mockLlm>;
+  /** Defaults to null (push off). */
+  push?: PushSender | null;
 }
+
+/** The previous test's app: its event listeners must finish before the database is reset. */
+let previousApp: ReturnType<typeof buildApp> | undefined;
 
 /** Fresh app + empty database + seeded owner and job roles. */
 export async function createHarness(options: HarnessOptions = {}) {
+  if (previousApp) {
+    const old = previousApp;
+    previousApp = undefined;
+    await old.serviceContext.background.drain();
+    await old.close();
+  }
   await resetDb();
   const db = testPrisma();
   const realData = createDataAccess(db);
@@ -79,17 +91,29 @@ export async function createHarness(options: HarnessOptions = {}) {
     taskAssigned: [] as AppEvents['task:assigned'][],
     taskStatus: [] as AppEvents['task:status-changed'][],
     updates: [] as AppEvents['update:sent'][],
+    alertsCreated: [] as AppEvents['alert:created'][],
+    statusChanged: [] as AppEvents['status:changed'][],
   };
   bus.on('employee:registered', (e) => events.registered.push(e));
   bus.on('security:alert', (e) => events.alerts.push(e));
   bus.on('task:assigned', (e) => events.taskAssigned.push(e));
   bus.on('task:status-changed', (e) => events.taskStatus.push(e));
   bus.on('update:sent', (e) => events.updates.push(e));
+  bus.on('alert:created', (e) => events.alertsCreated.push(e));
+  bus.on('status:changed', (e) => events.statusChanged.push(e));
   const logs: string[] = [];
   const llm = options.llm ?? mockLlm();
 
   const app = buildApp(
-    { healthRepo: createHealthRepository(db), data, env, clock: clock.now, bus, llm: llm.client },
+    {
+      healthRepo: createHealthRepository(db),
+      data,
+      env,
+      clock: clock.now,
+      bus,
+      llm: llm.client,
+      push: options.push ?? null,
+    },
     {
       logger: options.captureLogs
         ? loggerOptions('trace', { write: (line) => void logs.push(line) })
@@ -97,6 +121,7 @@ export async function createHarness(options: HarnessOptions = {}) {
     },
   );
   await app.ready();
+  previousApp = app;
 
   await runSeed(
     realData,
@@ -120,6 +145,11 @@ export async function createHarness(options: HarnessOptions = {}) {
     logs,
     llm,
     role,
+
+    /** Waits for event listeners (stored alerts, live status, pushes) to finish. */
+    drain() {
+      return app.serviceContext.background.drain();
+    },
 
     async login(email: string, password: string, ip = '10.0.0.1') {
       const res = await app.inject({

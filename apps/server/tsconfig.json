@@ -3,5 +3,11 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["src", "prisma", "prisma.config.ts", "../../scripts/llm-eval.ts"]
+  "include": [
+    "src",
+    "prisma",
+    "prisma.config.ts",
+    "../../scripts/llm-eval.ts",
+    "../../scripts/simulate-agent.ts"
+  ]
 }

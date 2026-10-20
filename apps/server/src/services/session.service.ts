@@ -18,6 +18,12 @@ export const HEARTBEAT_RETENTION_MS = 90 * 24 * 60 * 60_000;
  * calling start twice (two tabs, web + agent) never creates a second open session.
  */
 export async function startSession(ctx: ServiceContext, userId: string): Promise<WorkSession> {
+  const session = await startSessionTx(ctx, userId);
+  ctx.bus.emit('presence:changed', { userId });
+  return session;
+}
+
+async function startSessionTx(ctx: ServiceContext, userId: string): Promise<WorkSession> {
   const now = ctx.clock();
   try {
     return await ctx.data.transaction(async (repos) => {
@@ -59,7 +65,11 @@ export async function stopSession(
   reason: SessionEndReason = 'MANUAL_STOP',
 ): Promise<WorkSession | null> {
   const now = ctx.clock();
-  return ctx.data.transaction((repos) => closeOpenSession(repos, userId, now, reason));
+  const closed = await ctx.data.transaction((repos) =>
+    closeOpenSession(repos, userId, now, reason),
+  );
+  ctx.bus.emit('presence:changed', { userId });
+  return closed;
 }
 
 export async function currentSession(ctx: ServiceContext, userId: string): Promise<SessionCurrent> {
@@ -75,7 +85,7 @@ export async function recordHeartbeats(
 ): Promise<HeartbeatResult> {
   const now = ctx.clock();
   const autocloseSec = ctx.env.SESSION_AUTOCLOSE_AFTER_SEC;
-  return ctx.data.transaction(async (repos) => {
+  const result = await ctx.data.transaction(async (repos) => {
     await repos.sessions.lockUser(userId);
     const since = new Date(now.getTime() - HEARTBEAT_MAX_AGE_MS - autocloseSec * 1000);
     const sessions = await repos.sessions.listForMerge(userId, since);
@@ -101,6 +111,8 @@ export async function recordHeartbeats(
       session: open ? toWorkSession(open) : null,
     };
   });
+  ctx.bus.emit('presence:changed', { userId });
+  return result;
 }
 
 /**
@@ -123,18 +135,22 @@ export async function autoCloseSessions(
     // `lastHeartbeatAt` is non-null by the query. The update is guarded on it, so a heartbeat
     // that arrived since the query wins.
     const last = s.lastHeartbeatAt as Date;
-    autoClosed += await ctx.data.transaction(async (tx) => {
+    const closed = await ctx.data.transaction(async (tx) => {
       await tx.sessions.lockUser(s.userId);
       return tx.sessions.closeIfSilent(s.id, last);
     });
+    autoClosed += closed;
+    if (closed > 0) ctx.bus.emit('presence:changed', { userId: s.userId });
   }
 
   let maxDuration = 0;
   for (const s of await repos.sessions.listNoHeartbeatOpen(new Date(now.getTime() - capMs))) {
-    maxDuration += await ctx.data.transaction(async (tx) => {
+    const closed = await ctx.data.transaction(async (tx) => {
       await tx.sessions.lockUser(s.userId);
       return tx.sessions.closeIfNoHeartbeat(s.id, new Date(s.startedAt.getTime() + capMs));
     });
+    maxDuration += closed;
+    if (closed > 0) ctx.bus.emit('presence:changed', { userId: s.userId });
   }
   return { autoClosed, maxDuration };
 }

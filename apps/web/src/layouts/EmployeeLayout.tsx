@@ -1,3 +1,5 @@
+import { ToastProvider } from '../components/Toasts';
+import { RealtimeProvider } from '../realtime/RealtimeProvider';
 import { AppShell, type NavItem } from './AppShell';
 
 const nav: NavItem[] = [
@@ -11,5 +13,11 @@ const nav: NavItem[] = [
 export const EMPLOYEE_LOGOUT_WARNING = 'Logging out ends your work session. Log out now?';
 
 export function EmployeeLayout() {
-  return <AppShell nav={nav} tabs={nav} logoutWarning={EMPLOYEE_LOGOUT_WARNING} />;
+  return (
+    <ToastProvider>
+      <RealtimeProvider role="EMPLOYEE">
+        <AppShell nav={nav} tabs={nav} logoutWarning={EMPLOYEE_LOGOUT_WARNING} />
+      </RealtimeProvider>
+    </ToastProvider>
+  );
 }

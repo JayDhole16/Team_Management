@@ -1,11 +1,13 @@
 import { Link } from 'react-router';
 import { useUser } from '../../auth/AuthProvider';
+import { useUnreadUpdates } from '../../components/UpdateViews';
 import { Card, PageHeader } from '../../components/ui';
 import { LogoutButton } from '../../layouts/AppShell';
 
 /** The phone tab bar's "More": account and links that do not fit in the tab bar. */
 export function MorePage() {
   const user = useUser();
+  const unread = useUnreadUpdates().data?.count ?? 0;
   return (
     <div className="space-y-4">
       <PageHeader title="More" />
@@ -14,6 +16,8 @@ export function MorePage() {
         <p className="text-sm text-gray-600">{user.email}</p>
       </Card>
       {[
+        { to: '/owner/updates', label: unread > 0 ? `Updates (${unread} unread)` : 'Updates' },
+        { to: '/owner/employees', label: 'Employees' },
         { to: '/owner/projects', label: 'Projects' },
         { to: '/owner/invites', label: 'Invites and codes' },
       ].map((item) => (

@@ -87,7 +87,7 @@ export async function deactivateEmployee(
   id: string,
 ): Promise<Employee> {
   const now = ctx.clock();
-  return ctx.data.transaction(async (repos) => {
+  const result = await ctx.data.transaction(async (repos) => {
     const before = await findEmployee(repos, id);
     if (before.status === 'DEACTIVATED') return toEmployee(before);
     const updated = await repos.users.update(id, {
@@ -113,6 +113,10 @@ export async function deactivateEmployee(
     });
     return toEmployee(updated);
   });
+  // After the commit: close their sockets and update the live board.
+  ctx.bus.emit('employee:deactivated', { userId: id });
+  ctx.bus.emit('presence:changed', { userId: id });
+  return result;
 }
 
 /** The employee can log in again; a FACE_RESCAN code is needed to enroll the face again. */

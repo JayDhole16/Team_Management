@@ -17,7 +17,8 @@
     "db:migrate": "pnpm --filter server db:migrate",
     "db:seed": "pnpm --filter server db:seed",
     "env:setup": "node scripts/setup-env.mjs",
-    "llm:eval": "pnpm --filter server llm:eval"
+    "llm:eval": "pnpm --filter server llm:eval",
+    "sim:agent": "pnpm --filter server sim:agent"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

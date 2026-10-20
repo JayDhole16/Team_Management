@@ -1,4 +1,5 @@
 import type {
+  Alert,
   CodeListItem,
   CodeStatus,
   Employee,
@@ -18,6 +19,7 @@ import type {
   WorkSession as WorkSessionRow,
 } from '../generated/prisma/client';
 import { dbDateToString } from '../lib/clock';
+import type { AlertRow } from '../repositories/alert.repository';
 import type { ProgressUpdateRow } from '../repositories/progress-update.repository';
 import type { TaskRow } from '../repositories/task.repository';
 
@@ -166,5 +168,21 @@ export function toUpdate(update: ProgressUpdateRow): Update {
     task: update.task
       ? { id: update.task.id, title: update.task.title, status: update.task.status }
       : null,
+  };
+}
+
+export function toAlert(alert: AlertRow): Alert {
+  return {
+    id: alert.id,
+    kind: alert.kind,
+    employeeId: alert.userId,
+    employeeName: alert.user?.name ?? null,
+    idleReason: alert.idleReason,
+    score: alert.score,
+    securityKind: alert.securityKind,
+    message: alert.message,
+    at: alert.at.toISOString(),
+    receivedAt: alert.receivedAt.toISOString(),
+    ownerAckAt: alert.ownerAckAt?.toISOString() ?? null,
   };
 }

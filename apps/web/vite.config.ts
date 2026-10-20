@@ -18,6 +18,8 @@ export default defineConfig({
     proxy: {
       // Same origin in dev, so no CORS and the httpOnly refresh cookie just works.
       '/api': apiTarget,
+      // Live status and alerts (Socket.IO, WebSocket upgrade).
+      '/socket.io': { target: apiTarget, ws: true },
     },
   },
 });

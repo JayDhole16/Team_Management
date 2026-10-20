@@ -1,7 +1,9 @@
 import type { Env } from '../config/env';
+import type { BackgroundQueue } from '../lib/background';
 import type { Clock } from '../lib/clock';
 import type { EventBus } from '../lib/events';
 import { FailureLimiter } from '../lib/rate-limiter';
+import type { PushSender } from '../lib/push-sender';
 import type { LlmClient } from '../llm/types';
 import type { DataAccess } from '../repositories';
 
@@ -13,6 +15,9 @@ export const CODE_FAILURES_PER_IP = 5;
 export const AI_CALLS_PER_USER = 60;
 /** Progress updates sent per employee in the window, so the owner's inbox cannot be flooded. */
 export const UPDATES_PER_USER = 30;
+/** Idle events per employee in the window. The shortest idle interval is 5 min, so a real
+ *  agent sends at most ~3; the cap stops a loop from flooding the owner with beeps. */
+export const IDLE_EVENTS_PER_USER = 20;
 
 export interface Limiters {
   /** Failed logins per IP. */
@@ -28,6 +33,8 @@ export interface Limiters {
   ai: FailureLimiter;
   /** Every progress update sent, per employee. */
   updates: FailureLimiter;
+  /** Every idle event reported, per employee. */
+  idleEvents: FailureLimiter;
 }
 
 export function createLimiters(env: Pick<Env, 'CLAIM_GLOBAL_FAILURE_CAP'>, now: Clock): Limiters {
@@ -40,6 +47,7 @@ export function createLimiters(env: Pick<Env, 'CLAIM_GLOBAL_FAILURE_CAP'>, now: 
     recovery: perKey(CODE_FAILURES_PER_IP),
     ai: perKey(AI_CALLS_PER_USER),
     updates: perKey(UPDATES_PER_USER),
+    idleEvents: perKey(IDLE_EVENTS_PER_USER),
   };
 }
 
@@ -51,4 +59,7 @@ export interface ServiceContext {
   bus: EventBus;
   limiters: Limiters;
   llm: LlmClient;
+  /** Null when VAPID keys are not configured (push off). */
+  push: PushSender | null;
+  background: BackgroundQueue;
 }

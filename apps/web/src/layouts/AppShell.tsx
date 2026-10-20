@@ -32,17 +32,27 @@ export function AppShell({
   nav,
   tabs,
   logoutWarning,
+  headerExtra,
 }: {
   nav: NavItem[];
   tabs: NavItem[];
   logoutWarning?: string;
+  /** Shown in the top bar on every page (the owner's alert sound button). */
+  headerExtra?: ReactNode;
 }) {
   const user = useUser();
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900">
       <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4">
-        <span className="font-semibold">Leaders Key</span>
-        <span className="truncate pl-4 text-sm text-gray-600">{user.name}</span>
+        <span className="shrink-0 font-semibold">Leaders Key</span>
+        <span className="flex min-w-0 items-center gap-3 pl-4">
+          {headerExtra}
+          <span
+            className={`truncate text-sm text-gray-600 ${headerExtra ? 'hidden sm:inline' : ''}`}
+          >
+            {user.name}
+          </span>
+        </span>
       </header>
       <div className="mx-auto flex max-w-6xl">
         <nav
