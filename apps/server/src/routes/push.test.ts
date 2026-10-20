@@ -76,6 +76,11 @@ describe('push subscriptions and alert pushes', () => {
 
     await h.app.inject({
       method: 'POST',
+      url: '/api/v1/sessions/start',
+      headers: bearer(accessToken),
+    });
+    await h.app.inject({
+      method: 'POST',
       url: '/api/v1/agent/idle-event',
       headers: bearer(accessToken),
       payload: { at: h.clock.now().toISOString(), reason: 'NO_FACE' },
@@ -90,6 +95,19 @@ describe('push subscriptions and alert pushes', () => {
         url: '/owner/alerts',
       },
     });
+  });
+
+  it('does not push a quiet idle alert (no work session open)', async () => {
+    const { h, push, ownerToken, accessToken } = await setup();
+    await subscribe(h, ownerToken);
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/agent/idle-event',
+      headers: bearer(accessToken),
+      payload: { at: h.clock.now().toISOString(), reason: 'NO_FACE' },
+    });
+    await h.drain();
+    expect(push.sent).toHaveLength(0);
   });
 
   it('pushes security alerts too', async () => {
@@ -125,6 +143,11 @@ describe('push subscriptions and alert pushes', () => {
     const push = fakePushSender(() => ({ ok: false, gone: true, statusCode: 410 }));
     const { h, ownerToken, accessToken } = await setup(push);
     await subscribe(h, ownerToken);
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/sessions/start',
+      headers: bearer(accessToken),
+    });
     await h.app.inject({
       method: 'POST',
       url: '/api/v1/agent/idle-event',

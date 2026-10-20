@@ -66,6 +66,16 @@ describe('owner realtime effects', () => {
   });
 });
 
+describe('quiet alerts', () => {
+  it('a late or out-of-session alert refreshes the lists without a beep or toast', () => {
+    expect(ownerEffects({ event: 'alert:stored', payload: { alertId: ID, at: AT } })).toEqual({
+      invalidate: ['alerts', 'alerts-open', 'live'],
+      toast: null,
+      beep: false,
+    });
+  });
+});
+
 describe('employee realtime effects', () => {
   it('a new task shows a toast and refreshes My tasks', () => {
     const fx = employeeEffects({ event: 'task:assigned', payload: { taskId: ID, at: AT } });

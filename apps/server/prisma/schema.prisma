@@ -411,6 +411,9 @@ model Alert {
   /// When it happened (client time for idle events, clamped).
   at            DateTime
   receivedAt    DateTime    @map("received_at")
+  /// False for an idle event that arrived late (agent offline queue) or outside a work
+  /// session: stored and listed, but no beep, toast or push (decided 2026-10-20).
+  notified      Boolean     @default(true)
   /// The employee dismissed the agent's modal (Phase 9).
   employeeAckAt DateTime?   @map("employee_ack_at")
   ownerAckAt    DateTime?   @map("owner_ack_at")

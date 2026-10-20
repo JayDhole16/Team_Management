@@ -114,7 +114,10 @@ export function attachRealtime(app: FastifyInstance, ctx: ServiceContext) {
   const off = [
     ctx.bus.on('status:changed', (e) => owner.emit('status:changed', e)),
     ctx.bus.on('alert:created', ({ alert }) => {
-      if (alert.kind === 'IDLE' && alert.employeeId && alert.idleReason) {
+      if (!alert.notified) {
+        // Late or outside a session: refresh the lists, no beep or toast.
+        owner.emit('alert:stored', { alertId: alert.id, at: alert.at });
+      } else if (alert.kind === 'IDLE' && alert.employeeId && alert.idleReason) {
         owner.emit('idle:alert', {
           alertId: alert.id,
           userId: alert.employeeId,

@@ -437,8 +437,9 @@ Update this at the end of every phase (the `/phase` command does it).
   - Sockets of a user signed out elsewhere (logout on another device, token reuse, password reset) stay open until their access token expires (≤ 15 min). This matches REST access tokens; fix with the `sessions_valid_after` work in Phase 8/12 (security L5).
   - The 10-device push limit can be exceeded by parallel requests from the owner (L8, accepted).
   - No per-user rate limit on heartbeats/start/stop yet (status refreshes are coalesced); add in Phase 12 with the Phase 5 L2 item.
-  - No retention for alerts (L7): how long to keep them is a business decision (see Manual checks).
-- **Open question for the user (Phase 8/9):** should an idle event that arrives late (agent offline queue) or when no session is open still beep and push? Today every accepted idle event beeps and pushes.
+- Follow-up after the user's decisions (2026-10-20), migration `20261020105634_alerts_notified` (`alerts.notified`):
+  - **Retention:** acknowledged alerts are deleted 6 months after they happened (hourly, with the heartbeat clean-up). Open alerts stay until acknowledged.
+  - **Quiet idle events:** an idle event beeps, pops up and pushes only when it is happening now: it reached the server within 5 minutes and a work session is open. A late one (agent offline queue) or one outside a session is stored and listed until acknowledged, but quietly, labelled "Reported late by the desktop agent…" or "Reported outside a work session…". The owner's lists refresh through a new socket event `alert:stored`.
 - The real agent (Phase 9) should send AWAY heartbeats while its "Are you there?" prompt is open. An ACTIVE heartbeat after an idle alert shows the employee as Working again.
 
 ## Decisions
@@ -463,6 +464,7 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - Q17: GPU PC runs Windows, on during office hours only.
 - Q19: phone push alerts wanted.
 - Q20: "do whatever is best": standard (non-admin) macOS accounts for company MacBook users.
+- Phase 7 (2026-10-20): "On break" lasts until midnight IST. Acknowledged alerts are deleted after 6 months. Idle events beep and push only when received within 5 minutes with a work session open; others are stored quietly ("do whichever is best").
 
 ## Manual checks pending
 (Things a human must verify on real devices.)
@@ -505,6 +507,6 @@ Answers are recorded inline in docs/PRD.md section 5 (committed 2026-10-18). The
 - [ ] Phase 7 [TEST]: on the owner's real computer and browser, with `pnpm dev` running: open Live status, press "Enable alerts", use "Test sound" to set the volume, then in Git Bash `SIM_PASSWORD='<employee password>' pnpm sim:agent -- --email <employee email> --idle-after 20 --reason NO_FACE --stop-after 60`. You should hear the beep and see the employee's name with "nobody at the camera"; the card turns Idle, then about 3 minutes after the heartbeats stop, Offline. Acknowledge the alert on the Alerts page.
 - [ ] Phase 7 [SETUP]: for phone push run `pnpm env:setup --add-missing`, set `VAPID_SUBJECT=mailto:<owner email>` in `.env`, restart `pnpm dev`.
 - [ ] Phase 7 [TEST]: on your phone through the tunnel (`LK_TUNNEL=1 pnpm dev`, `cloudflared tunnel --url http://localhost:5173`): the beep works only while the page is open and the phone unlocked; Alerts → "Enable notifications", then close the page and trigger an idle event with the simulator: a notification must arrive. On iPhone: Share → Add to Home Screen first and open the app from the icon. A quick tunnel address changes every run, so a phone subscription only lasts while that tunnel runs; repeat the final check on the deployed site (Phase 11).
-- [ ] Phase 7 [DECISION]: how long to keep alerts (for example, delete acknowledged alerts after 6 or 12 months?), and whether a late idle event (from the agent's offline queue) or one with no open session should still beep and push.
+- [x] Phase 7 [DECISION]: acknowledged alerts are deleted 6 months after they happened; late or out-of-session idle events are stored quietly (decided 2026-10-20, see Phase 7).
 - [ ] Phase 11 / on-site: on the client's 4 GB RTX 3050, pull qwen3.5:4b, run the eval and check `ollama ps` says 100% GPU. If not, try `ollama pull qwen3.5:2b` (or `OLLAMA_NUM_CTX=3072`) and re-run. Record the final model (PRD Q21).
 - [ ] Phase 11: behind Cloudflare Tunnel, set `TRUST_PROXY=true` and use the real client IP (CF-Connecting-IP); otherwise every request looks like one IP and the per-IP limits act globally.

@@ -78,6 +78,8 @@ export function ownerEffects(e: OwnerEvent): RealtimeEffects {
       return none('tasks', 'projects', 'project');
     case 'alert:acked':
       return none('alerts', 'alerts-open');
+    case 'alert:stored':
+      return none('alerts', 'alerts-open', 'live');
   }
 }
 

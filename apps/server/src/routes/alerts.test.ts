@@ -7,6 +7,7 @@ import {
   OpenAlertCountSchema,
 } from '@lk/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { pruneAlerts } from '../services/alert.service';
 import { IDLE_EVENTS_PER_USER } from '../services/context';
 import { bearer, createHarness, EMPLOYEE_PASSWORD, type Harness } from '../test/helpers';
 
@@ -21,6 +22,8 @@ describe('alerts (idle events and security alerts)', () => {
     token = e.accessToken;
     userId = e.userId;
     ownerToken = e.ownerToken;
+    // Idle checks run during a work session; quiet cases are tested on their own.
+    await h.app.inject({ method: 'POST', url: '/api/v1/sessions/start', headers: bearer(token) });
   });
 
   const idleEvent = (body: object, t = token) =>
@@ -58,8 +61,55 @@ describe('alerts (idle events and security alerts)', () => {
       idleReason: 'NO_FACE',
       ownerAckAt: null,
     });
+    expect(result.notified).toBe(true);
+    expect(page.items[0]?.notified).toBe(true);
     expect(await openCount()).toBe(1);
     expect(h.events.alertsCreated.map((e) => e.alert.employeeName)).toEqual(['Rahul Sharma']);
+  });
+
+  it('a late event (agent offline queue) is stored and listed, but quietly', async () => {
+    const tenMinAgo = new Date(h.clock.now().getTime() - 10 * 60_000).toISOString();
+    const result = IdleEventResultSchema.parse(
+      (await idleEvent({ at: tenMinAgo, reason: 'NO_ACTIVITY' })).json<{ data: unknown }>().data,
+    );
+    expect(result).toMatchObject({ accepted: true, notified: false });
+    const [alert] = (await list()).items;
+    expect(alert).toMatchObject({ notified: false, ownerAckAt: null });
+    expect(await openCount()).toBe(1);
+    expect(h.events.alertsCreated[0]?.alert.notified).toBe(false);
+    // Up to 5 minutes late still counts as now.
+    const fourMinAgo = new Date(h.clock.now().getTime() - 4 * 60_000).toISOString();
+    const recent = IdleEventResultSchema.parse(
+      (await idleEvent({ at: fourMinAgo, reason: 'NO_FACE' })).json<{ data: unknown }>().data,
+    );
+    expect(recent.notified).toBe(true);
+  });
+
+  it('an event with no work session open (on a break) is stored quietly', async () => {
+    await h.app.inject({ method: 'POST', url: '/api/v1/sessions/stop', headers: bearer(token) });
+    const result = IdleEventResultSchema.parse(
+      (await idleEvent({ at: now(), reason: 'NO_FACE' })).json<{ data: unknown }>().data,
+    );
+    expect(result).toMatchObject({ accepted: true, notified: false });
+  });
+
+  it('deletes acknowledged alerts older than 6 months; open ones stay', async () => {
+    await idleEvent({ at: now(), reason: 'NO_FACE' });
+    await idleEvent({ at: now(), reason: 'NO_ACTIVITY' });
+    const [first] = (await list()).items;
+    await h.app.inject({
+      method: 'PATCH',
+      url: `/api/v1/alerts/${first?.id}/ack`,
+      headers: bearer(ownerToken),
+    });
+
+    h.clock.advanceMinutes(60 * 24 * 150); // about 5 months: nothing goes yet
+    expect(await pruneAlerts(h.app.serviceContext)).toBe(0);
+    h.clock.advanceMinutes(60 * 24 * 40); // past 6 months
+    expect(await pruneAlerts(h.app.serviceContext)).toBe(1);
+    const left = await h.db.alert.findMany();
+    expect(left).toHaveLength(1);
+    expect(left[0]?.ownerAckAt).toBeNull();
   });
 
   it('accepts back-dated events up to 12 h, ignores older or future ones, clamps small skew', async () => {

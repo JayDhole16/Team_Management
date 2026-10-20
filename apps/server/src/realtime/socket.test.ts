@@ -113,6 +113,11 @@ describe('Socket.IO realtime', () => {
     const emp = open(employee.accessToken);
     await Promise.all([connected(owner), connected(emp)]);
     const empGot = record(emp);
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/sessions/start',
+      headers: bearer(employee.accessToken),
+    });
 
     const alert = next<Record<string, unknown>>(owner, 'idle:alert');
     await h.app.inject({
@@ -156,6 +161,23 @@ describe('Socket.IO realtime', () => {
 
     await h.drain();
     expect(empGot).toEqual([]);
+  });
+
+  it('a late idle event only refreshes the owner lists (alert:stored, no idle:alert)', async () => {
+    const owner = open(employee.ownerToken);
+    await connected(owner);
+    const ownerGot = record(owner);
+    const stored = next<Record<string, unknown>>(owner, 'alert:stored');
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/agent/idle-event',
+      headers: bearer(employee.accessToken),
+      // No session open: quiet.
+      payload: { at: h.clock.now().toISOString(), reason: 'NO_FACE' },
+    });
+    expect(Object.keys(await stored).sort()).toEqual(['alertId', 'at']);
+    await h.drain();
+    expect(ownerGot).not.toContain('idle:alert');
   });
 
   it('tells the owner about status changes', async () => {

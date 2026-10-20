@@ -183,6 +183,7 @@ export function toAlert(alert: AlertRow): Alert {
     message: alert.message,
     at: alert.at.toISOString(),
     receivedAt: alert.receivedAt.toISOString(),
+    notified: alert.notified,
     ownerAckAt: alert.ownerAckAt?.toISOString() ?? null,
   };
 }

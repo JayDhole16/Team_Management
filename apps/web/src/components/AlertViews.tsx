@@ -1,4 +1,4 @@
-import { describeAlert, IDLE_REASON_LABELS, type Alert } from '@lk/shared';
+import { describeAlert, IDLE_REASON_LABELS, quietReason, type Alert } from '@lk/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import { ackAlert, fetchOpenAlertCount } from '../api/alerts';
@@ -60,6 +60,7 @@ export function AlertCard({ alert }: { alert: Alert }) {
           <p className="font-semibold break-words text-gray-900">{alertHeadline(alert)}</p>
           <p className="text-sm break-words text-gray-800">{alertDetail(alert)}</p>
           <p className="text-xs text-gray-600">{formatDateTime(alert.at)}</p>
+          {quietReason(alert) && <p className="text-xs text-gray-600">{quietReason(alert)}</p>}
         </div>
         {open ? (
           <Badge tone="amber">{alert.kind === 'IDLE' ? 'Idle' : 'Security'}</Badge>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AlertListQuerySchema, describeAlert, IdleEventBodySchema } from './alerts';
+import { AlertListQuerySchema, describeAlert, IdleEventBodySchema, quietReason } from './alerts';
 import { PushSubscribeBodySchema } from './push';
 import { OwnerSocketEvents, TaskAssignedEventSchema } from './realtime';
 
@@ -100,5 +100,18 @@ describe('socket event schemas', () => {
         at: NOW,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('quietReason', () => {
+  it('says why no beep was played', () => {
+    const at = '2026-10-20T10:00:00.000Z';
+    expect(quietReason({ notified: true, at, receivedAt: at })).toBeNull();
+    expect(quietReason({ notified: false, at, receivedAt: '2026-10-20T10:20:00.000Z' })).toContain(
+      'Reported late',
+    );
+    expect(quietReason({ notified: false, at, receivedAt: at })).toContain(
+      'outside a work session',
+    );
   });
 });

@@ -1,13 +1,15 @@
-import type {
-  AckAllBody,
-  AckAllResult,
-  Alert,
-  AlertListQuery,
-  AlertPage,
-  IdleEventBody,
-  IdleEventResult,
-  OpenAlertCount,
-  SecurityAlertKind,
+import {
+  ALERT_RETENTION_MONTHS,
+  IDLE_ALERT_LATE_AFTER_MS,
+  type AckAllBody,
+  type AckAllResult,
+  type Alert,
+  type AlertListQuery,
+  type AlertPage,
+  type IdleEventBody,
+  type IdleEventResult,
+  type OpenAlertCount,
+  type SecurityAlertKind,
 } from '@lk/shared';
 import type { Prisma } from '../generated/prisma/client';
 import { badRequest, notFound, rateLimited } from '../lib/errors';
@@ -18,8 +20,12 @@ import { toAlert } from './mappers';
 
 /**
  * A failed idle check reported by the employee's agent (ARCHITECTURE section 5). Stored as
- * an open alert; the owner gets a beep, a toast and a push. Same time limits as heartbeats:
- * up to 12 h old (offline queue), small clock skew clamped to "now", further ahead ignored.
+ * an open alert. Same time limits as heartbeats: up to 12 h old (offline queue), small clock
+ * skew clamped to "now", further ahead ignored.
+ *
+ * The owner gets a beep, a toast and a push only when it is happening now: received within
+ * IDLE_ALERT_LATE_AFTER_MS and with a work session open. A late or out-of-session event is
+ * stored quietly (`notified: false`); it is still listed until acknowledged.
  */
 export async function recordIdleEvent(
   ctx: ServiceContext,
@@ -34,10 +40,12 @@ export async function recordIdleEvent(
   const sent = new Date(body.at);
   const ageMs = now.getTime() - sent.getTime();
   if (ageMs > HEARTBEAT_MAX_AGE_MS || ageMs < -HEARTBEAT_MAX_FUTURE_MS) {
-    return { accepted: false, alertId: null };
+    return { accepted: false, alertId: null, notified: false };
   }
   const at = sent > now ? now : sent;
 
+  const late = now.getTime() - at.getTime() > IDLE_ALERT_LATE_AFTER_MS;
+  const sessionOpen = (await ctx.data.repos.sessions.findOpen(userId)) !== null;
   const row = await ctx.data.repos.alerts.create({
     kind: 'IDLE',
     userId,
@@ -45,11 +53,12 @@ export async function recordIdleEvent(
     score: body.score ?? null,
     at,
     receivedAt: now,
+    notified: !late && sessionOpen,
   });
   const alert = toAlert(row);
   ctx.bus.emit('alert:created', { alert });
   ctx.bus.emit('presence:changed', { userId });
-  return { accepted: true, alertId: alert.id };
+  return { accepted: true, alertId: alert.id, notified: alert.notified };
 }
 
 /** A repeat of an open security alert within this window adds no new alert, beep or push. */
@@ -128,4 +137,12 @@ export async function ackAllAlerts(
   const acknowledged = await repos.alerts.ackAllUpTo(new Date(body.upTo), now, ownerId);
   if (acknowledged > 0) ctx.bus.emit('alert:acked', { at: now.toISOString() });
   return { acknowledged };
+}
+
+/** Acknowledged alerts older than ALERT_RETENTION_MONTHS (by when they happened) are deleted.
+ *  Open alerts are never deleted. Returns how many went. */
+export async function pruneAlerts(ctx: ServiceContext): Promise<number> {
+  const cutoff = new Date(ctx.clock());
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - ALERT_RETENTION_MONTHS);
+  return ctx.data.repos.alerts.deleteAcknowledgedBefore(cutoff);
 }

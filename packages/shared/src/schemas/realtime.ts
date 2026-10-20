@@ -51,6 +51,9 @@ export const TaskStatusChangedEventSchema = z.object({ taskId: IdSchema, at: z.i
 
 export const AlertAckedEventSchema = z.object({ at: z.iso.datetime() });
 
+/** A quiet alert was stored (late or outside a session): the lists refresh, no beep. */
+export const AlertStoredEventSchema = z.object({ alertId: IdSchema, at: z.iso.datetime() });
+
 /** To the employee only. Not the previous assignee (decided in Phase 5). */
 export const TaskAssignedEventSchema = z.object({ taskId: IdSchema, at: z.iso.datetime() });
 
@@ -62,6 +65,7 @@ export const OwnerSocketEvents = {
   'update:new': UpdateNewEventSchema,
   'task:status-changed': TaskStatusChangedEventSchema,
   'alert:acked': AlertAckedEventSchema,
+  'alert:stored': AlertStoredEventSchema,
 } as const;
 
 export const EmployeeSocketEvents = {

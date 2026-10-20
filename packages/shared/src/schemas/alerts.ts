@@ -43,6 +43,17 @@ export const SECURITY_KIND_LABELS: Record<SecurityAlertKind, string> = {
   DUPLICATE_FACE: 'the same face was registered twice',
 };
 
+/**
+ * An idle event beeps, pops up and pushes only when it is happening now: it reached the server
+ * within this time and a work session was open. Older ones (the agent's offline queue) and
+ * ones outside a session are stored and listed quietly (decided 2026-10-20).
+ */
+export const IDLE_ALERT_LATE_AFTER_MS = 5 * 60_000;
+
+/** Acknowledged alerts older than this are deleted (decided 2026-10-20: 6 months). Open
+ *  alerts are kept until acknowledged. */
+export const ALERT_RETENTION_MONTHS = 6;
+
 export const ALERTS_PAGE_DEFAULT = 50;
 export const ALERTS_PAGE_MAX = 100;
 
@@ -97,6 +108,8 @@ export const AlertSchema = z.object({
   at: z.iso.datetime(),
   /** Server time it arrived (an idle event's `at` is the laptop's time and can be hours old). */
   receivedAt: z.iso.datetime(),
+  /** False: stored without a beep, toast or push (reported late, or outside a work session). */
+  notified: z.boolean(),
   ownerAckAt: z.iso.datetime().nullable(),
 });
 export type Alert = z.infer<typeof AlertSchema>;
@@ -111,6 +124,8 @@ export const IdleEventResultSchema = z.object({
   /** False when `at` was more than 12 h old or too far in the future (ignored). */
   accepted: z.boolean(),
   alertId: IdSchema.nullable(),
+  /** True when the owner was alerted (beep, toast, push). */
+  notified: z.boolean(),
 });
 export type IdleEventResult = z.infer<typeof IdleEventResultSchema>;
 
@@ -119,6 +134,15 @@ export type OpenAlertCount = z.infer<typeof OpenAlertCountSchema>;
 
 export const AckAllResultSchema = z.object({ acknowledged: z.number().int().min(0) });
 export type AckAllResult = z.infer<typeof AckAllResultSchema>;
+
+/** Why an alert was stored without a beep, in plain words (null when the owner was alerted). */
+export function quietReason(alert: Pick<Alert, 'notified' | 'at' | 'receivedAt'>): string | null {
+  if (alert.notified) return null;
+  const lateMs = Date.parse(alert.receivedAt) - Date.parse(alert.at);
+  return lateMs > IDLE_ALERT_LATE_AFTER_MS
+    ? 'Reported late by the desktop agent (it was offline), so no beep was played.'
+    : 'Reported outside a work session, so no beep was played.';
+}
 
 /** One line for a toast or a push notification. */
 export function describeAlert(alert: {

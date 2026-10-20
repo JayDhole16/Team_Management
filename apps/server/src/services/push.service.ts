@@ -112,7 +112,8 @@ export async function pushAlert(
   alert: Alert,
 ): Promise<{ sent: number; failed: number; removed: number }> {
   const sender = ctx.push;
-  if (!sender) return { sent: 0, failed: 0, removed: 0 };
+  // A quiet alert (reported late, or outside a work session) is not pushed.
+  if (!sender || !alert.notified) return { sent: 0, failed: 0, removed: 0 };
   const { repos } = ctx.data;
   const payload = JSON.stringify(alertPushPayload(alert));
   const subs = await repos.pushSubscriptions.listForOwners();

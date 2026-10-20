@@ -78,6 +78,14 @@ export function createAlertRepository(db: Db) {
       return count;
     },
 
+    /** Retention: acknowledged alerts that happened before `cutoff`. */
+    async deleteAcknowledgedBefore(cutoff: Date): Promise<number> {
+      const { count } = await db.alert.deleteMany({
+        where: { ownerAckAt: { not: null }, at: { lt: cutoff } },
+      });
+      return count;
+    },
+
     /** Each user's newest idle alert (live board). */
     latestIdleForUsers: (userIds: string[]) =>
       userIds.length === 0
